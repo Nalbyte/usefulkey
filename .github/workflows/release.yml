@@ -38,6 +38,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Run tests
+        run: pnpm test:all
+
       - name: Determine npm tag
         id: determine_npm_tag
         shell: bash
