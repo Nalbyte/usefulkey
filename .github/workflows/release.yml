@@ -39,7 +39,7 @@ jobs:
         run: pnpm build
 
       - name: Run tests
-        run: pnpm test:all
+        run: pnpm test:run
 
       - name: Determine npm tag
         id: determine_npm_tag
