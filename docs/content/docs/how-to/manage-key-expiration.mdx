@@ -1,0 +1,179 @@
+---
+title: Manage Key Expiration
+description: Learn how to create keys that expire and manage their lifecycle.
+---
+
+## Creating Keys with Expiration
+
+You can create API keys that automatically expire after a certain time. This is useful for temporary access or time-limited trials.
+
+### Keys That Expire in the Future
+
+```ts
+import { usefulkey, MemoryKeyStore } from "usefulkey";
+
+const uk = usefulkey({
+  adapters: {
+    keyStore: new MemoryKeyStore(),
+  },
+});
+
+// Create a key that expires in 1 hour
+const oneHourFromNow = Date.now() + (60 * 60 * 1000); // 1 hour in milliseconds
+
+const { result: keyData } = await uk.createKey({
+  expiresAt: oneHourFromNow,
+  metadata: { plan: "trial" }
+});
+
+console.log("Key expires at:", new Date(keyData.metadata?.expiresAt));
+```
+
+### Keys That Expire Soon (Testing)
+
+```ts
+// Create a key that expires in 30 seconds (for testing)
+const thirtySecondsFromNow = Date.now() + (30 * 1000);
+
+const { result: testKey } = await uk.createKey({
+  expiresAt: thirtySecondsFromNow,
+  metadata: { test: true }
+});
+```
+
+### Checking Expiration Status
+
+When you verify a key, UsefulKey automatically checks if it's expired:
+
+```ts
+// This key is still valid
+const { result: validResult } = await uk.verifyKey({
+  key: keyData.key
+});
+// { valid: true, ... }
+
+// Wait for expiration, then check again
+await new Promise(resolve => setTimeout(resolve, 31000)); // Wait 31 seconds
+
+const { result: expiredResult } = await uk.verifyKey({
+  key: testKey.key
+});
+// { valid: false, reason: "expired" }
+```
+
+### Extending Key Expiration
+
+You can extend a key's expiration date:
+
+```ts
+// Extend the key by 1 hour (60 minutes * 60 seconds * 1000 milliseconds)
+const { result: extended } = await uk.extendKeyExpiry(
+  keyData.id,
+  60 * 60 * 1000  // 1 hour in milliseconds
+);
+
+console.log("New expiration:", new Date(extended.expiresAt));
+```
+
+### Finding Expired Keys
+
+You can find and clean up expired keys in batches:
+
+```ts
+// Find keys that expired more than 1 hour ago
+const { result: sweepResult } = await uk.sweepExpired({
+  batchSize: 50,  // Process up to 50 keys at a time
+  olderThan: Date.now() - (60 * 60 * 1000)  // 1 hour ago
+});
+
+console.log(`Processed: ${sweepResult.processed}`);
+console.log(`Hard removed: ${sweepResult.hardRemoved}`);
+```
+
+### Key States
+
+Keys can be in different states:
+
+```ts
+// Active key
+// { valid: true }
+
+// Expired key
+// { valid: false, reason: "expired" }
+
+// Revoked key
+// { valid: false, reason: "revoked" }
+
+// Key that doesn't exist
+// { valid: false, reason: "not_found" }
+
+// Key that exceeded usage limit
+// { valid: false, reason: "usage_exceeded" }
+```
+
+### Complete Expiration Example
+
+```ts
+import { usefulkey, MemoryKeyStore } from "usefulkey";
+
+async function expirationExample() {
+  const uk = usefulkey({
+    adapters: {
+      keyStore: new MemoryKeyStore(),
+    },
+  });
+
+  // Create a key that expires in 2 minutes
+  const twoMinutesFromNow = Date.now() + (2 * 60 * 1000);
+  const { result: keyData } = await uk.createKey({
+    expiresAt: twoMinutesFromNow,
+    metadata: { plan: "trial" }
+  });
+
+  console.log("Created key:", keyData.id);
+  console.log("Expires at:", new Date(keyData.metadata?.expiresAt));
+
+  // Check if it's valid
+  const { result: check1 } = await uk.verifyKey({ key: keyData.key });
+  console.log("Before expiration:", check1.valid); // true
+
+  // Extend expiration by 5 minutes
+  await uk.extendKeyExpiry(keyData.id, 5 * 60 * 1000);
+  console.log("Extended expiration");
+
+  // Clean up expired keys
+  const { result: sweep } = await uk.sweepExpired({
+    batchSize: 10,
+    olderThan: Date.now() - (60 * 1000) // Older than 1 minute
+  });
+
+  console.log(`Cleaned up ${sweep.hardRemoved} expired keys`);
+}
+
+expirationExample();
+```
+
+### Best Practices
+
+1. **Set reasonable expiration times** - Don't create keys that last forever unless necessary
+2. **Use different expiration times for different use cases**:
+   - Trial keys: 7-30 days
+   - Session keys: 24 hours
+   - API keys: 90-365 days
+3. **Clean up expired keys regularly** - Use `sweepExpired` in a cron job
+4. **Monitor key usage** - Track how often keys are used before expiring
+
+### Automatic Cleanup
+
+Enable automatic cleanup of expired keys when they're accessed:
+
+```ts
+const uk = usefulkey({
+  adapters: {
+    keyStore: new MemoryKeyStore(),
+  },
+  autoDeleteExpiredKeys: true,  // Automatically delete expired keys
+});
+```
+
+With this setting, expired keys are automatically removed from storage when you try to verify them.

@@ -1,0 +1,43 @@
+---
+name: Question / Help
+description: Ask a question or get help
+title: "[QUESTION] "
+labels: ["question"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Need help or have a question? Check our [documentation](https://usefulkey.nalbyte.com) first.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What would you like to know?
+      placeholder: How do I...?
+    validations:
+      required: true
+
+  - type: textarea
+    id: code
+    attributes:
+      label: Code example (optional)
+      description: Share relevant code if applicable
+      render: typescript
+      placeholder: |
+        ```typescript
+        import { usefulkey } from "usefulkey";
+
+        // Your code here
+        ```
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment (optional)
+      description: Details about your setup
+      placeholder: |
+        - OS: [e.g. macOS, Windows]
+        - Node.js version: [e.g. 18.x]
+        - UsefulKey version: [e.g. 1.0.0]

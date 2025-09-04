@@ -1,0 +1,66 @@
+---
+title: ClickHouse
+description: Batched analytics adapter that writes events to ClickHouse via HTTP or client.
+---
+
+### Overview
+
+- Buffers events and periodically flushes them to ClickHouse using HTTP JSONEachRow or a provided client.
+- Resilient flushing: on failures, batches are re-queued and draining pauses until next interval.
+
+### Usage
+
+```ts
+import { usefulkey, ClickHouseAnalytics } from "usefulkey";
+
+const analytics = new ClickHouseAnalytics({
+  url: process.env.CLICKHOUSE_URL!,
+  database: "default",
+  table: "usefulkey_events",
+  username: process.env.CLICKHOUSE_USER,
+  password: process.env.CLICKHOUSE_PASSWORD,
+  headers: { "X-App": "usefulkey" },
+  batchSize: 100,
+  flushIntervalMs: 2000,
+  timeoutMs: 10000,
+  // or provide a direct client with `insert({table,values,format?,database?})`
+  // client,
+});
+
+const uk = usefulkey({ adapters: { analytics } });
+```
+
+### Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `url` | `string` | — | Base URL to ClickHouse HTTP endpoint. |
+| `database` | `string` | `"default"` | Target database. |
+| `table` | `string` | `"usefulkey_events"` | Target table. |
+| `client` | `ClickHouseClientLike` | `undefined` | If provided, uses `client.insert` instead of HTTP. |
+| `username` | `string` | `undefined` | HTTP basic auth username. |
+| `password` | `string` | `undefined` | HTTP basic auth password. |
+| `headers` | `Record<string,string>` | `{}` | Extra HTTP headers. |
+| `batchSize` | `number` | `50` | Max events per flush. |
+| `flushIntervalMs` | `number` | `2000` | Background flush interval. |
+| `timeoutMs` | `number` | `10000` | HTTP request timeout. |
+
+Table schema (suggested):
+
+```sql
+CREATE TABLE IF NOT EXISTS usefulkey_events (
+  event String,
+  payload String,  -- JSON string
+  ts DateTime
+)
+ENGINE = MergeTree()
+ORDER BY ts;
+```
+
+Behavior:
+
+- Events are queued in-memory and flushed either on size (`batchSize`) or time (`flushIntervalMs`).
+- `payload` is serialized JSON for broad compatibility.
+- Call `analytics.close()` on shutdown to stop timer and flush remaining events.
+
+

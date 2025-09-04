@@ -1,0 +1,46 @@
+---
+title: extendKeyExpiry
+description: Push a key's expiry forward by a specified number of milliseconds.
+---
+
+### Description
+
+Extends the expiration time of an existing API key by adding the specified number of milliseconds to its current expiry. If the key doesn't have an expiry set, it creates one based on the current time plus the additional milliseconds. This is useful for subscription renewals or extending grace periods for users.
+
+### Signature
+
+```ts
+extendKeyExpiry(id: KeyId, additionalMs: number): Promise<Result<{ expiresAt: number } | null>>
+```
+
+### Parameters
+
+- **id**: key identifier.
+- **additionalMs**: positive milliseconds to add.
+
+### Returns
+
+`Promise<Result<{ expiresAt: number } | null>>` null when key not found.
+
+### Behavior
+
+- If key has no expiry, sets it to `now() + additionalMs`.
+- Sends `key.expiry_extended` analytics.
+
+### Examples
+
+Extend a key by 30 days:
+
+```ts
+const { result } = await uk.extendKeyExpiry("k_123", 30 * 24 * 60 * 60 * 1000);
+console.log(result?.expiresAt); // new expiry timestamp
+```
+
+Extend a key by 1 hour:
+
+```ts
+await uk.extendKeyExpiry("k_456", 60 * 60 * 1000);
+```
+
+
+

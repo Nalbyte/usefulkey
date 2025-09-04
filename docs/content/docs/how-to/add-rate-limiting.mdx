@@ -1,0 +1,165 @@
+---
+title: Add Rate Limiting
+description: Learn how to add rate limiting to your API keys to control usage.
+---
+
+## Rate Limiting Basics
+
+Rate limiting helps you control how often API keys can be used. UsefulKey supports two types of rate limiting: fixed windows and token buckets.
+
+### Fixed Window Rate Limiting
+
+A fixed window limits the number of requests in a specific time period. For example, "100 requests per minute".
+
+```ts
+import { usefulkey, MemoryKeyStore, MemoryRateLimitStore, ratelimit } from "usefulkey";
+
+const uk = usefulkey({
+  adapters: {
+    keyStore: new MemoryKeyStore(),
+    rateLimitStore: new MemoryRateLimitStore(),
+  },
+}, {
+  plugins: [
+    ratelimit({
+      default: {
+        kind: "fixed",
+        limit: 100,     // Maximum 100 requests
+        duration: "1m"  // Per minute
+      }
+    })
+  ]
+});
+```
+
+### Token Bucket Rate Limiting
+
+A token bucket allows bursts of requests but maintains an overall rate. Tokens are added at a steady rate, and each request consumes one token.
+
+```ts
+const uk = usefulkey({
+  adapters: {
+    keyStore: new MemoryKeyStore(),
+    rateLimitStore: new MemoryRateLimitStore(),
+  },
+}, {
+  plugins: [
+    ratelimit({
+      default: {
+        kind: "tokenBucket",
+        capacity: 50,        // Bucket holds up to 50 tokens
+        refill: {
+          tokens: 10,       // Add 10 tokens
+          interval: "1m"    // Every minute
+        }
+      }
+    })
+  ]
+});
+```
+
+### Using Rate Limited Keys
+
+When rate limiting is enabled, you must provide a `namespace` when verifying keys:
+
+```ts
+// Create a key
+const { result: keyData } = await uk.createKey();
+
+// Verify with namespace (required for rate limiting)
+const { result: verification } = await uk.verifyKey({
+  key: keyData.key,
+  namespace: "api"  // Group rate limits by namespace
+});
+
+if (verification.valid) {
+  console.log("Request allowed");
+} else {
+  console.log("Rate limited:", verification.reason);
+}
+```
+
+### Per-Key Rate Limiting
+
+You can also set rate limits for individual keys:
+
+```ts
+// Verify with custom rate limit for this specific call
+const { result: verification } = await uk.verifyKey({
+  key: keyData.key,
+  namespace: "api",
+  rateLimit: {
+    kind: "fixed",
+    limit: 5,
+    duration: "1m"
+  }
+});
+```
+
+### Rate Limit Results
+
+When rate limiting blocks a request, you'll get:
+
+```ts
+{
+  valid: false,
+  reason: "rate_limited"
+}
+```
+
+### Namespaces Explained
+
+Namespaces let you have separate rate limits for different parts of your API:
+
+```ts
+// Different limits for different API endpoints
+await uk.verifyKey({ key: keyData.key, namespace: "auth" });     // Login endpoints
+await uk.verifyKey({ key: keyData.key, namespace: "search" });   // Search endpoints
+await uk.verifyKey({ key: keyData.key, namespace: "admin" });    // Admin endpoints
+```
+
+### Complete Example
+
+```ts
+import { usefulkey, MemoryKeyStore, MemoryRateLimitStore, ratelimit } from "usefulkey";
+
+async function rateLimitedExample() {
+  const uk = usefulkey({
+    adapters: {
+      keyStore: new MemoryKeyStore(),
+      rateLimitStore: new MemoryRateLimitStore(),
+    },
+  }, {
+    plugins: [
+      ratelimit({
+        default: {
+          kind: "fixed",
+          limit: 10,      // 10 requests
+          duration: "1m"  // per minute
+        }
+      })
+    ]
+  });
+
+  // Create a key
+  const { result: keyData } = await uk.createKey();
+
+  // Try multiple requests
+  for (let i = 0; i < 12; i++) {
+    const { result: verification } = await uk.verifyKey({
+      key: keyData.key,
+      namespace: "api"
+    });
+
+    if (verification.valid) {
+      console.log(`Request ${i + 1}: ✓ Allowed`);
+    } else {
+      console.log(`Request ${i + 1}: ✗ ${verification.reason}`);
+    }
+  }
+}
+
+rateLimitedExample();
+```
+
+This will show the first 10 requests as allowed, and requests 11-12 as rate limited.

@@ -1,0 +1,225 @@
+---
+title: Authoring Adapters
+description: How to implement a keystore, rate limit store, or analytics adapter for UsefulKey.
+---
+
+Adapters let you connect UsefulKey to just about anything. Implement an adapter with the following interfaces and pass it to the `usefulkey` config when you create the instance. (see [Configuration](/docs/concepts/configuration))
+### Guidelines
+
+- Keep methods deterministic and fast; avoid internal retries where the core will call again.
+- Preserve semantics of return shapes exactly; core relies on them.
+- Use milliseconds everywhere for `createdAt`, `expiresAt`, etc.
+- Ensure atomicity for rate limits where required (e.g., Redis Lua or DB transactions).
+- Keep migrations/schema with your infrastructure; follow existing adapters for portable SQL.
+
+For contribution standards, code style, and testing expectations, see [Contributing](/docs/additional-info/contributing).
+
+### KeyStoreAdapter interface
+
+Persist API keys and their state.
+
+```ts
+interface KeyStoreAdapter {
+  createKey(record: KeyRecord): Promise<void>;
+  findKeyById(id: string): Promise<KeyRecord | null>;
+  findKeyByHash(keyHash: string): Promise<KeyRecord | null>;
+  updateKey(record: KeyRecord): Promise<void>;
+  revokeKeyById(id: string): Promise<void>;
+  hardRemoveKeyById(id: string): Promise<void>;
+}
+```
+
+- Ensure `find*` methods return `null` when not found.
+- `revokeKeyById` should set a millisecond timestamp (e.g., `revokedAt`).
+- `hardRemoveKeyById` must permanently delete the record.
+
+#### Example: In-memory keystore
+
+```ts
+import type { KeyStoreAdapter, KeyRecord } from "usefulkey";
+
+export class MemoryKeyStore implements KeyStoreAdapter {
+  private byId = new Map<string, KeyRecord>();
+  private byHash = new Map<string, KeyRecord>();
+
+  async createKey(record: KeyRecord): Promise<void> {
+    this.byId.set(record.id, record);
+    this.byHash.set(record.keyHash, record);
+  }
+
+  async findKeyById(id: string): Promise<KeyRecord | null> {
+    return this.byId.get(id) ?? null;
+  }
+
+  async findKeyByHash(keyHash: string): Promise<KeyRecord | null> {
+    return this.byHash.get(keyHash) ?? null;
+  }
+
+  async updateKey(record: KeyRecord): Promise<void> {
+    this.byId.set(record.id, record);
+    this.byHash.set(record.keyHash, record);
+  }
+
+  async revokeKeyById(id: string): Promise<void> {
+    const existing = this.byId.get(id);
+    if (!existing) return;
+    const updated: KeyRecord = { ...existing, revokedAt: Date.now() };
+    this.byId.set(id, updated);
+    this.byHash.set(updated.keyHash, updated);
+  }
+
+  async hardRemoveKeyById(id: string): Promise<void> {
+    const existing = this.byId.get(id);
+    if (!existing) return;
+    this.byId.delete(id);
+    this.byHash.delete(existing.keyHash);
+  }
+}
+```
+
+- Stores are indexed by both `id` and `keyHash` for fast lookups.
+- Revocation sets `revokedAt` to the current time in milliseconds.
+- Replace this with your database-backed implementation for production.
+
+### RateLimitStoreAdapter interface
+
+Evaluate quotas; supports fixed window and token bucket algorithms.
+
+```ts
+interface RateLimitStoreAdapter {
+  incrementAndCheck(
+    namespace: string,
+    identifier: string,
+    limit: number,
+    durationMs: Milliseconds,
+  ): Promise<{ success: boolean; remaining: number; reset: number }>;
+  check(
+    namespace: string,
+    identifier: string,
+    limit: number,
+    durationMs: Milliseconds,
+  ): Promise<{ success: boolean; remaining: number; reset: number }>;
+  consumeTokenBucket(
+    namespace: string,
+    identifier: string,
+    capacity: number,
+    refillTokens: number,
+    refillIntervalMs: Milliseconds,
+    cost?: number,
+  ): Promise<{ success: boolean; remaining: number; reset: number }>;
+  reset(namespace: string, identifier: string): Promise<void>;
+}
+```
+
+- All durations and timestamps are milliseconds.
+- `reset` clears counters/buckets for the given `namespace` and `identifier`.
+
+#### Example: In-memory rate limit store
+
+```ts
+import type { RateLimitStoreAdapter, Milliseconds } from "usefulkey";
+
+export class MemoryRateLimitStore implements RateLimitStoreAdapter {
+  private fixedWindowCounts = new Map<string, number>();
+  private tokenBuckets = new Map<string, { tokens: number; lastRefillMs: number }>();
+
+  private fwKey(ns: string, id: string, durationMs: Milliseconds, windowStartMs: number): string {
+    return `${ns}:${id}:fw:${durationMs}:${windowStartMs}`;
+  }
+
+  async incrementAndCheck(ns: string, id: string, limit: number, durationMs: Milliseconds) {
+    const now = Date.now();
+    const windowStart = Math.floor(now / durationMs) * durationMs;
+    const reset = windowStart + durationMs;
+    const key = this.fwKey(ns, id, durationMs, windowStart);
+    const next = (this.fixedWindowCounts.get(key) ?? 0) + 1;
+    this.fixedWindowCounts.set(key, next);
+    return { success: next <= limit, remaining: Math.max(0, limit - next), reset };
+  }
+
+  async check(ns: string, id: string, limit: number, durationMs: Milliseconds) {
+    const now = Date.now();
+    const windowStart = Math.floor(now / durationMs) * durationMs;
+    const reset = windowStart + durationMs;
+    const key = this.fwKey(ns, id, durationMs, windowStart);
+    const count = this.fixedWindowCounts.get(key) ?? 0;
+    return { success: count < limit, remaining: Math.max(0, limit - count), reset };
+  }
+
+  async consumeTokenBucket(
+    ns: string,
+    id: string,
+    capacity: number,
+    refillTokens: number,
+    refillIntervalMs: Milliseconds,
+    cost = 1,
+  ) {
+    const now = Date.now();
+    const key = `${ns}:${id}:tb`;
+    const state = this.tokenBuckets.get(key) ?? { tokens: capacity, lastRefillMs: now };
+
+    if (now > state.lastRefillMs) {
+      const intervals = Math.floor((now - state.lastRefillMs) / refillIntervalMs);
+      if (intervals > 0) {
+        state.tokens = Math.min(capacity, state.tokens + intervals * refillTokens);
+        state.lastRefillMs += intervals * refillIntervalMs;
+      }
+    }
+
+    let success = false;
+    if (state.tokens >= cost) {
+      state.tokens -= cost;
+      success = true;
+    }
+
+    this.tokenBuckets.set(key, state);
+    const reset = state.lastRefillMs + refillIntervalMs;
+    return { success, remaining: Math.max(0, state.tokens), reset };
+  }
+
+  async reset(ns: string, id: string) {
+    const fwPrefix = `${ns}:${id}:fw:`;
+    for (const k of Array.from(this.fixedWindowCounts.keys())) {
+      if (k.startsWith(fwPrefix)) this.fixedWindowCounts.delete(k);
+    }
+    this.tokenBuckets.delete(`${ns}:${id}:tb`);
+  }
+}
+```
+
+### AnalyticsAdapter interface
+
+Emit audit/analytics events.
+
+```ts
+interface AnalyticsAdapter {
+  track(event: string, payload: Record<string, unknown>): Promise<void>;
+}
+```
+
+#### Example: Noop analytics
+
+```ts
+import type { AnalyticsAdapter } from "usefulkey";
+
+export class NoopAnalytics implements AnalyticsAdapter {
+  async track(event: string, payload: Record<string, unknown>): Promise<void> {
+    // send to your system, or ignore
+  }
+}
+```
+
+### Wiring your adapter
+
+```ts
+import { usefulkey } from "usefulkey";
+
+const uk = usefulkey({
+  adapters: {
+    keyStore: new MemoryKeyStore(),
+    rateLimitStore: new MemoryRateLimitStore(),
+    analytics: new NoopAnalytics(),
+  },
+});
+```
+

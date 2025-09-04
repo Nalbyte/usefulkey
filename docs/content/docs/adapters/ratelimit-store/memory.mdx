@@ -1,0 +1,28 @@
+---
+title: Memory
+description: In-memory fixed window and token bucket implementation.
+---
+
+### Overview
+
+- In-memory rate limit store for single-process use. Supports fixed window and token bucket.
+
+### Usage
+
+```ts
+import { MemoryRateLimitStore, usefulkey } from "usefulkey";
+
+const rateLimitStore = new MemoryRateLimitStore();
+const uk = usefulkey({ adapters: { rateLimitStore } });
+```
+
+### Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| — | — | — | This adapter has no options. |
+
+### Notes
+
+- Good for local development. Not distributed.
+

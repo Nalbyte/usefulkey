@@ -1,0 +1,258 @@
+---
+title: Rate Limit
+description: Control how many times keys can be used within a time period. Supports different limiting strategies.
+---
+
+### How It Works
+
+This plugin limits how often keys can be verified:
+
+- You can set limits per verification call or use default limits
+- When someone uses a key too many times, verification fails with `"rate_limited"`
+- Supports two types of limits: fixed windows and token buckets
+
+### How Limits Are Chosen
+
+The plugin decides which limit to use in this order:
+
+1. **Per-call limit** (if you provide `rateLimit` in verifyKey)
+2. **Plugin default** (if set when creating the plugin)
+3. **No limit** (if neither is set)
+
+Only one limit applies per call - they're not combined.
+
+#### Examples
+
+```ts
+// 1) Use specific limit for this call (ignores plugin defaults)
+await uk.verifyKey({
+  key,
+  identifier: "ip_1.1.1.1",
+  namespace: "api",
+  rateLimit: { kind: "fixed", limit: 100, duration: "1m" }, // 100 per minute
+});
+
+// 2) Use plugin default (no per-call limit specified)
+await uk.verifyKey({
+  key,
+  identifier: "ip_1.1.1.1",
+  namespace: "api",
+});
+// Uses whatever default you set in the plugin
+
+// 3) No limiting (neither per-call nor default set)
+await uk.verifyKey({ key, identifier: "ip_1.1.1.1", namespace: "api" });
+```
+
+> **Important**: You must include a `namespace` to enable rate limiting. Without it, no limits apply.
+
+### Settings
+
+You can set up the plugin in two ways:
+
+#### Quick Setup (Fixed Window)
+
+```ts
+ratelimit({ limit: 100, duration: "1m" }) // 100 requests per minute
+```
+
+#### Full Setup
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `limit` | `number` | — | Max requests allowed (for quick setup) |
+| `duration` | `string \| number` | — | Time window like `"1m"` or `60000` (for quick setup) |
+| `default` | `RateLimitRequest` | — | Default limit to use when none specified per call |
+| `identify` | `function` | `identifier ?? ip ?? key` | How to identify who's making requests |
+| `reason` | `string` | `"rate_limited"` | Error message when limit exceeded |
+| `analyticsKind` | `string` | — | Custom label for analytics events |
+
+#### Limit Types
+
+**Fixed Window** - Simple limit per time period:
+```ts
+{ kind: "fixed", limit: 100, duration: "1m" } // 100 per minute
+```
+
+**Token Bucket** - Allows bursts but refills over time:
+```ts
+{
+  kind: "tokenBucket",
+  capacity: 30,        // Max tokens
+  refill: { tokens: 1, interval: "2s" } // Add 1 token every 2 seconds
+}
+```
+
+
+### Options for verifyKey
+
+When calling verifyKey, you can add these options:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `identifier` | `string` | No | Who is making this request (like IP or user ID) |
+| `namespace` | `string` | Yes* | Group of limits (like "api" or "auth") |
+| `rateLimit` | `RateLimitRequest` | No | Limit for this specific call |
+
+*Required to enable rate limiting
+
+The plugin sends analytics when blocking: `"ratelimit.blocked"` with details about what happened.
+
+### Usage
+
+```ts
+import { usefulkey, ratelimit } from "usefulkey";
+
+// Set up with a default limit
+const uk = usefulkey({}, {
+  plugins: [
+    ratelimit({ default: { kind: "fixed", limit: 10, duration: "30s" } }),
+  ],
+});
+
+// Use default limit
+await uk.verifyKey({
+  key,
+  identifier: req.ip,
+  namespace: "api",  // Required!
+});
+
+// Override with stricter limit for this call
+await uk.verifyKey({
+  key,
+  identifier: req.ip,
+  namespace: "api",
+  rateLimit: { kind: "fixed", limit: 100, duration: "1m" },
+});
+```
+
+Remember: always include `namespace` or rate limiting won't work!
+
+### What Happens During Verification
+
+- **Limit exceeded** → `{ valid: false, reason: "rate_limited" }`
+- **Who gets limited** - Uses `identifier` if provided, otherwise falls back to IP address or key
+
+### Namespaces
+
+Namespaces let you have separate limits for different parts of your app:
+
+- **Why?** Keep limits separate for different features (API calls vs auth vs uploads)
+- **How it works** - Each `(namespace, identifier)` pair has its own counter
+- **Common namespaces** - `"api"`, `"auth"`, `"uploads"`, or `"tenant_123"`
+- **Storage** - Counters are saved as `"namespace:identifier"` (like `"api:192.168.1.1"`)
+
+**Important**: Without a namespace, rate limiting is disabled for that call.
+
+**Example**: User "alice" can make:
+- 100 API calls per minute (`namespace: "api"`)
+- 10 auth attempts per minute (`namespace: "auth"`)
+- These are tracked separately!
+
+Identifier defaults to `identifier ?? ip ?? key` but can be overridden per call.
+
+### Setting Up Defaults
+
+```ts
+import { usefulkey, ratelimit } from "usefulkey";
+
+const uk = usefulkey({}, {
+  plugins: [
+    ratelimit({
+      // This limit applies to all calls unless overridden
+      default: { kind: "fixed", limit: 100, duration: "1m" },
+    }),
+  ],
+});
+```
+
+### Override Per Call
+
+```ts
+// Use a different limit just for this call
+await uk.verifyKey({
+  key,
+  identifier: req.ip,
+  namespace: "api",
+  rateLimit: { kind: "tokenBucket", capacity: 120, refill: { tokens: 2, interval: "1s" } },
+});
+```
+
+### Real-World Examples
+
+```ts
+import { usefulkey, ratelimit } from "usefulkey";
+
+// Set up default limit
+const uk = usefulkey({}, {
+  plugins: [
+    ratelimit({ default: { kind: "fixed", limit: 100, duration: "1m" } }),
+  ],
+});
+
+// Different limits for different features:
+
+// Regular API calls - uses default (100 per minute)
+await uk.verifyKey({
+  key,
+  identifier: req.ip,
+  namespace: "api",
+});
+
+// Login attempts - stricter limit (10 per minute)
+await uk.verifyKey({
+  key,
+  identifier: req.ip,
+  namespace: "auth",
+  rateLimit: { kind: "fixed", limit: 10, duration: "1m" },
+});
+
+// File uploads - token bucket for bursts
+await uk.verifyKey({
+  key,
+  identifier: userId,
+  namespace: "uploads",
+  rateLimit: {
+    kind: "tokenBucket",
+    capacity: 30,
+    refill: { tokens: 1, interval: "2s" },
+  },
+});
+
+// Multi-tenant - separate limits per tenant
+await uk.verifyKey({
+  key,
+  identifier: userId,
+  namespace: `tenant_${tenantId}`,
+});
+```
+
+Each namespace tracks limits separately!
+
+## Storage Options
+
+Choose where to store your rate limit data:
+
+- **Memory** (default) - Simple, but resets when app restarts
+- **Redis** - Fast and works across multiple servers
+- **Database** - Use if you already have Postgres/SQLite
+
+See: [Rate limit store adapters](/docs/adapters/ratelimit-store)
+
+## Tips
+
+- **Use clear namespaces** - Like `"api"`, `"auth"`, `"uploads"` to separate different limits
+- **Be consistent** - Always use the same way to identify users (IP or user ID)
+- **Start strict** - Set low limits first, then increase as you learn usage patterns
+- **Handle blocks nicely** - Show users when they'll be able to try again
+- **Watch and adjust** - Monitor your analytics to tune the limits
+
+## Common Issues
+
+- **Limits not working?** Make sure you're passing a `namespace`
+- **Wrong limits?** Check your `duration` values and refill rates
+- **Shared limits?** Use different namespaces to separate them
+
+## See also
+
+- Adapter reference: [Rate limit store adapters](/docs/adapters/ratelimit-store)

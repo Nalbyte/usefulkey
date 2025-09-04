@@ -1,0 +1,99 @@
+---
+title: verifyKey
+description: Validate a plaintext key with optional plugin-powered checks and return validity and metadata.
+---
+
+### Description
+
+Validates an API key and checks if it can be used for authentication. This is the main function for authenticating API requests. It verifies the key exists, hasn't expired, isn't revoked, and hasn't exceeded usage limits. When plugins are enabled, it also performs additional checks like rate limiting, IP restrictions, and scope validation. The function returns whether the key is valid and can include the key's metadata if requested.
+
+### Signature
+
+```ts
+verifyKey(input: VerifyOptions, returnMetadata?: boolean): Promise<Result<VerifyResult>>
+```
+
+### Parameters
+
+#### Core Parameters
+- **input.key**: The plaintext API key to verify (required)
+
+#### Plugin Parameters
+The following parameters only affect verification when their corresponding plugins are enabled:
+
+- **input.ip?**: Requester's IP address (used by rate-limit and IP access control plugins)
+- **input.identifier?**: Unique identifier for the caller (used by rate-limit plugin, also included in analytics)
+- **input.namespace?**: Logical grouping for rate limits (required when rate-limit plugin is active)
+- **input.scopes?**: Required permissions/scopes (used by permissions-scopes plugin)
+- **input.rateLimit?**: Per-call rate limit override (used by rate-limit plugin)
+
+#### Output Control
+- **returnMetadata?**: When `true`, includes the key's stored metadata in the response
+
+### Returns
+
+`Promise<Result<VerifyResult>>` where `result` (on success) contains:
+
+- **valid**: `boolean` - Whether the key is valid for use
+- **keyId?**: `string` - The key's ID (when valid)
+- **userId?**: `string` - Associated user ID (if any)
+- **metadata?**: `object` - Key metadata (when `returnMetadata` is true)
+- **reason?**: `string` - Failure reason (when invalid: "not_found", "revoked", "expired", "usage_exceeded", "blocked_by_plugin")
+
+### Rate Limiting
+
+When the rate-limit plugin is enabled, you must provide a `namespace` parameter. The plugin tracks usage per `identifier` (typically user ID or IP) within each namespace. You can also override rate limits per call using the `rateLimit` parameter.
+
+### Examples
+
+Basic key verification:
+```ts
+const { result, error } = await uk.verifyKey({ key: inputKey });
+if (error) throw new Error(error.message);
+if (!result?.valid) return unauthorized(result?.reason);
+```
+
+With metadata and rate limiting:
+```ts
+const check = await uk.verifyKey(
+  { 
+    key: inputKey, 
+    namespace: "api", 
+    identifier: userId, 
+    ip, 
+    rateLimit: { limit: 100, duration: "1m" } 
+  },
+  true // return metadata
+);
+```
+
+### Notes
+
+- Expired keys return `valid: false` and are automatically removed if `autoDeleteExpiredKeys` is enabled
+- Plugins can intercept verification via `beforeVerify` or `onKeyRecordLoaded` hooks
+- Plugin parameters are ignored when their corresponding plugins are disabled, but may still be included in analytics
+
+### Important: Rate Limit Plugin Requirements
+
+> **⚠️ When the rate limit plugin is enabled, you MUST provide a `namespace` parameter to `verifyKey`. If you omit the `namespace`, verification will fail with `reason: "namespace_required"`.**
+
+**What you need to add:**
+```ts
+// ❌ This will fail when rate limit plugin is enabled
+await uk.verifyKey({ key: "your-key" });
+
+// ✅ This works with rate limit plugin
+await uk.verifyKey({ 
+  key: "your-key", 
+  namespace: "api"  // Required when rate limit plugin is active
+});
+```
+
+**Common namespace examples:**
+- `"api"` - General API endpoints
+- `"auth"` - Authentication endpoints  
+- `"uploads"` - File upload endpoints
+- `"global"` - Global rate limiting
+- `"tenant:123"` - Per-tenant isolation
+
+

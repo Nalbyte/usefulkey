@@ -1,0 +1,4 @@
+{
+	"title": "Rate Limit Store Adapters",
+	"pages": ["memory", "sqlite", "redis", "postgres", "mysql", "cloudflare-kv"]
+}

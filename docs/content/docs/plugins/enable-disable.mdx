@@ -1,0 +1,63 @@
+---
+title: Enable / Disable
+description: Temporarily disable and re-enable keys via metadata. Adds helpers to toggle a key's availability.
+---
+
+### How It Works
+
+This plugin lets you temporarily turn keys on or off:
+
+- When you check a key, if it's marked as disabled, verification fails with reason `"disabled"`
+- You get helper functions to disable or re-enable keys
+- The disabled status is stored in the key's metadata
+
+### Settings
+
+This plugin doesn't need any configuration - it works out of the box.
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| (none) | — | — | No setup required. |
+
+### Usage
+
+```ts
+import { usefulkey, MemoryKeyStore, enableDisablePlugin } from "usefulkey";
+
+// Add the plugin when creating UsefulKey
+const uk = usefulkey(
+  { adapters: { keyStore: new MemoryKeyStore() } },
+  { plugins: [enableDisablePlugin()] },
+);
+
+// Create a key
+const { result } = await uk.createKey({ metadata: { plan: "pro" } });
+
+// Disable the key (users can't use it anymore)
+await uk.disableKey(result!.id);
+
+// Try to verify - this will fail
+const { result: denied } = await uk.verifyKey({ key: result!.key });
+// Result: { valid: false, reason: "disabled" }
+
+// Re-enable the key
+await uk.enableKey(result!.id);
+```
+
+### New Functions
+
+This plugin adds two functions to your `uk` instance:
+
+- `uk.disableKey(id: string)` - Turn off a key
+- `uk.enableKey(id: string)` - Turn on a key
+
+### What Happens During Verification
+
+- If a key is disabled, verification fails with `{ valid: false, reason: "disabled" }`
+
+### Analytics Events
+
+The plugin sends these events:
+
+- When disabling: `"key.disabled"` with key ID and timestamp
+- When enabling: `"key.enabled"` with key ID and timestamp

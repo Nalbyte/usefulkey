@@ -1,0 +1,102 @@
+---
+title: FAQ
+description: Common questions when adopting UsefulKey.
+---
+
+### Is plaintext stored?
+
+No. Only a one-way hash of the key is stored in your keystore adapter. See [Security](/docs/concepts/security).
+
+### How do I rotate keys?
+
+Create a new key, update clients, then revoke the old key by id. If you also need a new plaintext value, rotation is the preferred path.
+
+### Can I bring my own hashing or IDs?
+
+Yes. Use `customHashKey` to control hashing and `customIdGenerator` to control ids. If you set `secret`, UsefulKey uses a secret-based hash (HMAC with SHA-256) by default.
+
+### How do I change the key format?
+
+Set `keyPrefix` and `defaultKeyKind` (e.g., `KEY.URLSafe(40)`), or fully override generation with `customGenerateKey`. See [Keys](/docs/concepts/keys).
+
+### Does it support distributed rate limiting?
+
+Yes. Use `RedisRateLimitStore` or `PostgresRateLimitStore`. See [Rate Limiting](/docs/concepts/rate-limiting) and the plugin docs under [Plugins](/docs/plugins).
+
+### What does `verifyKey` return? Do I get metadata back?
+
+Public methods return a `Result<T>`. For verification, the `result` is a `VerifyResult` with `valid: boolean`, and a `reason` when invalid (e.g., `not_found`, `revoked`, `expired`, `usage_exceeded`, `rate_limited`). Metadata is included only when you pass `true` as the second argument to `verifyKey(..., true)`.
+
+### When is `namespace` required for verification?
+
+If the rate limit plugin is enabled, `namespace` is required on `verifyKey`. Without the plugin, `namespace` and `rateLimit` are not accepted. Namespaces scope counters (e.g., `"api"`, `"uploads"`, or tenant-scoped like `tenant:t_123`).
+
+### How do per-call rate limits interact with plugin defaults?
+
+Precedence is: per-call `rateLimit` overrides plugin defaults; otherwise the plugin `default` is used; otherwise verification fails due to missing rate limit configuration.
+
+### How do expiration and revocation differ?
+
+- **Expired**: `expiresAt <= now()` → `reason: "expired"`. Can be extended via `extendKeyExpiry(id, ms)` or by updating the record.
+- **Revoked**: always invalid with `reason: "revoked"` until rotated or deleted.
+
+You can enable `autoDeleteExpiredKeys` to hard-delete expired keys on access, or run `sweepExpired(...)` to batch clean up. See [Expiring keys](/docs/concepts/expiring-keys).
+
+### Can I limit how many times a key can be used?
+
+Yes. Use the Usage Limits per Key plugin to decrement and enforce `usesRemaining`, emitting analytics for changes and blocks.
+
+### How do I disable analytics or change the sink?
+
+Swap the analytics adapter. Use `NoopAnalytics` to disable or a production adapter (e.g., ClickHouse) to forward events. See [Analytics events](/docs/additional-info/analytics-events) and [Adapters](/docs/adapters/analytics).
+
+### Does UsefulKey work in serverless/edge environments?
+
+Yes. Provide a Web Crypto-like provider (`globalThis.crypto`) or Node’s crypto. For stronger protection if your database leaks, set `secret` to enable a secret-based hash (HMAC with SHA-256). See [Configuration](/docs/concepts/configuration) and [Security](/docs/concepts/security).
+
+### How should I map results and errors to HTTP responses?
+
+Map `valid: true` to 200. For `valid: false`, use 401/403/429 depending on `reason` (e.g., `rate_limited → 429`, `insufficient_scope → 403`). Core/adapters expose error codes (e.g., `KEYSTORE_*`) that generally map to 500. See [Error handling](/docs/additional-info/errors).
+
+### How can I safely rotate keys in production?
+
+1) Create a new key and deploy clients to use it. 2) Monitor traffic. 3) Revoke the old key by id. Prefer rotation when you need a new plaintext value and auditability.
+
+### How do I delete a key permanently vs. just revoking it?
+
+- Revoke: `uk.revokeKey(id)` marks as revoked and preserves history.
+- Hard delete: `uk.hardRemoveKey(id)` permanently removes the record (where supported by the adapter).
+
+### Can I look up a key without verifying it?
+
+Yes. Use `uk.getKey(plaintext)` or `uk.getKeyById(id)`. These return the stored record or `null` (respecting `autoDeleteExpiredKeys`).
+
+### How do plugins change the API surface?
+
+Plugins can add typed helpers to your `uk` instance (via `extend`) and run hooks during operations. You can optionally await `uk.ready` to ensure plugin setup is complete before first use. See [Plugins](/docs/plugins).
+
+### Do you support IP allow/deny lists and scopes/permissions?
+
+Yes. Use the IP Access Control plugins (`static` or `memory`) and the Permissions/Scopes plugin to require or manage scopes per key.
+
+### What key formats do you recommend?
+
+For public APIs, prefer URL-safe random strings 32–56 chars (e.g., `KEY.URLSafe(40)`). For internal services, `KEY.Hex(32)` or URL-safe 32+. Avoid UUIDv4 alone for public keys. See [Keys](/docs/concepts/keys).
+
+### Can I change the prefix per environment or per key?
+
+Yes. Globally via `keyPrefix` and `disablePrefix`; per key via `createKey({ prefix })`. The rendered plaintext includes the prefix unless disabled.
+
+### How should I handle multi-tenant isolation?
+
+Use distinct namespaces (e.g., `tenant:<id>`) for rate limits and store `tenantId` in metadata. See [Multi-tenant patterns](/docs/additional-info/multi-tenant).
+
+### Will UsefulKey log my plaintext keys?
+
+No. Core never logs plaintext. Avoid logging plaintext in your own application code. Use analytics only for non-sensitive fields like ids and counters.
+
+### How do I move from in-memory to production backends?
+
+Swap adapters to persistent implementations (Postgres/MySQL/SQLite for keystore; Redis/Postgres for rate limit; your analytics sink). See [Adapters](/docs/adapters/overview).
+
+

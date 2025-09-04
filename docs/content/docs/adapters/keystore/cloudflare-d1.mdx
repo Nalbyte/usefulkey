@@ -1,0 +1,61 @@
+---
+title: Cloudflare D1
+description: Cloudflare D1-backed keystore adapter.
+---
+
+### Overview
+
+- Keystore backed by Cloudflare D1 using the Worker runtime API (`prepare().bind().run()/first()/all()`).
+- On first use, it creates the required table and indexes. When available, it uses `exec` to run multiple database statements at once.
+- `metadata` is stored as JSON text.
+
+### Usage
+
+```ts
+import { D1KeyStore, usefulkey } from "usefulkey";
+
+export default {
+  async fetch(req: Request, env: { DB: D1Database }) {
+    const keyStore = new D1KeyStore(env.DB, { tableName: "usefulkey_keys" });
+    const uk = usefulkey({ adapters: { keyStore } });
+    // ...
+    return new Response("OK");
+  }
+};
+```
+
+### Client compatibility
+
+- This has been tested with Cloudflare D1.
+
+
+### Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `tableName` | `string` | `"usefulkey_keys"` | Name of the table to store keys. |
+
+Schema used by the adapter (created automatically if missing):
+
+```sql
+CREATE TABLE IF NOT EXISTS usefulkey_keys (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  prefix TEXT NOT NULL,
+  key_hash TEXT NOT NULL UNIQUE,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER,
+  metadata TEXT,
+  uses_remaining INTEGER,
+  revoked_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_usefulkey_keys_user_id ON usefulkey_keys(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_usefulkey_keys_key_hash ON usefulkey_keys(key_hash);
+```
+
+### Notes
+
+- `metadata` is stored as JSON string.
+- Epoch times are stored as milliseconds.
+
+

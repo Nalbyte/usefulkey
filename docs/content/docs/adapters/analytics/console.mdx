@@ -1,0 +1,24 @@
+---
+title: Console
+description: Logs analytics events to stdout. Useful for local development.
+---
+
+### Overview
+
+- Analytics adapter that logs events to the console. Good for development and tests.
+
+### Usage
+
+```ts
+import { ConsoleAnalytics, usefulkey } from "usefulkey";
+
+const analytics = new ConsoleAnalytics();
+const uk = usefulkey({ adapters: { analytics } });
+```
+
+Behavior
+
+- Prints events as `[usefulkey:analytics] <event>` with a JSON payload.
+- Non-blocking; errors are ignored by plugins.
+
+

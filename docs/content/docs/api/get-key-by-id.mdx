@@ -1,0 +1,51 @@
+---
+title: getKeyById
+description: Retrieve a key record by its stable identifier.
+---
+
+### Description
+
+Retrieves a complete key record from the store using the key's ID. This function returns all the key's metadata including creation time, expiry, usage limits, and any custom data. It's commonly used in admin panels, background jobs, and maintenance scripts where you need to inspect or manage key details.
+
+### Signature
+
+```ts
+getKeyById(id: KeyId): Promise<Result<KeyRecord | null>>
+```
+
+### Parameters
+
+- **id**: key identifier.
+
+### Returns
+
+`Promise<Result<KeyRecord | null>>`
+
+### Behavior
+
+- If expired and `autoDeleteExpiredKeys` is enabled, tries to remove it and returns `null`.
+
+### Examples
+
+Get a key's full details:
+
+```ts
+const { result } = await uk.getKeyById("k_123");
+if (result) {
+  console.log(result.userId); // associated user
+  console.log(result.metadata); // custom data
+  console.log(result.expiresAt); // expiry timestamp
+}
+```
+
+Check if a key exists:
+
+```ts
+const { result } = await uk.getKeyById("k_456");
+if (!result) {
+  console.log("Key not found or expired");
+}
+```
+
+
+

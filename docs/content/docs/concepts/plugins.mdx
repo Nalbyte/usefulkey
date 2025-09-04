@@ -1,0 +1,149 @@
+---
+title: Plugins
+description: Feature add-ons for policy and behavior.
+---
+
+## What are plugins?
+
+
+Plugins are small, focused add-ons that change UsefulKey behavior without modifying core logic. A plugin can:
+
+- Observe or block operations via lifecycle hooks
+- Add typed methods/properties to the `UsefulKey` instance via `extend`
+
+Plugins are applied when constructing UsefulKey and run in a predictable lifecycle during key creation and verification.
+
+## Plugin hooks
+
+#### Hook interface
+
+```ts
+export interface UsefulKeyPluginHooks {
+  name: string;
+  setup?: (ctx: UsefulKey) => void | Promise<void>;
+
+  // Verification lifecycle
+  beforeVerify?: (
+    ctx: UsefulKey,
+    args: {
+      key: string;
+      ip?: string;
+      identifier?: string | null;
+      namespace?: string | null;
+      rateLimit?: RateLimitRequest;
+    },
+  ) => Promise<{ reject: boolean; reason?: string } | undefined>;
+
+  onKeyRecordLoaded?: (
+    ctx: UsefulKey,
+    args: { input: VerifyOptions; record: KeyRecord },
+  ) => Promise<{ reject: boolean; reason?: string } | undefined>;
+
+  onVerifySuccess?: (
+    ctx: UsefulKey,
+    args: { input: VerifyOptions; record: KeyRecord },
+  ) => Promise<void>;
+
+  // Creation lifecycle
+  beforeCreateKey?: (
+    ctx: UsefulKey,
+    args: { input: CreateKeyInput },
+  ) => Promise<{ reject: boolean; reason?: string } | undefined>;
+
+  onKeyCreated?: (ctx: UsefulKey, args: { record: KeyRecord }) => Promise<void>;
+
+  // Optional extension surface added to the instance
+  extend?: Record<string, unknown>;
+}
+```
+
+#### Lifecycle
+
+- `setup` runs once during initialization; `uk.ready` resolves after all setups complete
+- `beforeVerify` runs before any database lookup; return `{ reject: true, reason }` to block
+- `onKeyRecordLoaded` runs after a record is fetched; can block (e.g., disabled, policy checks)
+- `onVerifySuccess` runs after a successful verification
+- `beforeCreateKey` runs before persisting a new key; can block
+- `onKeyCreated` runs after a key is persisted
+
+## Type-safe extensions
+
+Plugins may expose extra methods or flags through `extend`. These are merged onto the instance and typed automatically:
+
+```ts
+import { usefulkey } from "usefulkey";
+import type { UsefulKeyPlugin } from "usefulkey";
+
+function demo(): UsefulKeyPlugin<{ foo: () => string }> {
+  return () => ({ name: "demo", extend: { foo: () => "bar" } });
+}
+
+const uk = usefulkey({}, { plugins: [demo()] });
+uk.foo(); // typed: () => string
+```
+
+## Current plugins
+
+- **Rate limit**: `ratelimit` see [Rate limit](/docs/plugins/rate-limit)
+- **IP access control (static)**: `ipAccessControlStatic` see [IP access control (static)](/docs/plugins/ip-access-control-static)
+- **IP access control (memory)**: `ipAccessControlMemory` see [IP access control (memory)](/docs/plugins/ip-access-control-memory)
+- **IP access control (keystore)**: `ipAccessControlKeystore` see [IP access control (keystore)](/docs/plugins/ip-access-control-keystore)
+- **Usage limits per key**: `usageLimitsPerKey` see [Usage limits per key](/docs/plugins/usage-limits-per-key)
+- **Enable/Disable**: `enableDisablePlugin` see [Enable/Disable](/docs/plugins/enable-disable)
+- **Permissions/Scopes**: `permissionsScopes` see [Permissions/Scopes](/docs/plugins/permissions-scopes)
+
+## Examples
+
+### Rate limit (default + per-call)
+
+```ts
+import { usefulkey, ratelimit } from "usefulkey";
+
+const uk = usefulkey({}, {
+  plugins: [
+    // Applies to all verifyKey() calls
+    ratelimit({ default: { kind: "fixed", limit: 10, duration: "30s" } }),
+  ],
+});
+
+// Per-call selection
+await uk.verifyKey({
+  key,
+  identifier: "127.0.0.1",
+  namespace: "api",
+  rateLimit: { kind: "tokenBucket", capacity: 120, refill: { tokens: 2, interval: "1s" } },
+});
+
+// Precedence: per-call `rateLimit` overrides the plugin `default`.
+// Only one configuration is applied per call; they are not combined.
+// `namespace` and `identifier` must be provided when the rate limit plugin is enabled.
+```
+
+### Enable / disable
+
+```ts
+import { usefulkey, enableDisablePlugin } from "usefulkey";
+
+const uk = usefulkey({}, { plugins: [enableDisablePlugin()] });
+
+await uk.disableKey("key_123");
+await uk.enableKey("key_123");
+```
+
+## Authoring your own plugin
+
+You can create your own plugin by implementing the `UsefulKeyPlugin` interface. (see [Authoring Plugins](/docs/plugins/authoring))
+
+```ts
+import type { UsefulKeyPlugin } from "usefulkey";
+
+export function myPlugin(): UsefulKeyPlugin<{ foo: string }> {
+  return () => ({
+    name: "my-plugin",
+    // Optional hooks; return { reject: true, reason?: string } to block
+    beforeVerify: async () => undefined,
+    extend: { foo: "bar" },
+  });
+}
+```
+

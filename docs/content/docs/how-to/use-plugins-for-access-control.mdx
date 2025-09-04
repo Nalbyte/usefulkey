@@ -1,0 +1,311 @@
+---
+title: Use Plugins for Access Control
+description: Learn how to use plugins to add access control features like IP restrictions and usage limits.
+---
+
+## Plugin Basics
+
+Plugins extend UsefulKey with additional features. They can:
+- Block or allow verification based on custom rules
+- Add new methods to your UsefulKey instance
+- Track analytics events
+- Modify key behavior
+
+## IP Access Control
+
+Control which IP addresses can use your API keys.
+
+### Static IP Allow List
+
+Create a fixed list of allowed IP addresses:
+
+```ts
+import { usefulkey, MemoryKeyStore, ipAccessControlStatic } from "usefulkey";
+
+const uk = usefulkey({
+  adapters: {
+    keyStore: new MemoryKeyStore(),
+  },
+}, {
+  plugins: [
+    ipAccessControlStatic({
+      allow: ["192.168.1.100", "10.0.0.50"]
+    })
+  ]
+});
+```
+
+### Dynamic IP Control (Memory)
+
+Allow runtime changes to IP lists:
+
+```ts
+import { ipAccessControlMemory } from "usefulkey";
+
+const uk = usefulkey({
+  adapters: {
+    keyStore: new MemoryKeyStore(),
+  },
+}, {
+  plugins: [
+    ipAccessControlMemory({
+      allow: ["192.168.1.100"]
+    })
+  ]
+});
+
+// Add more IPs at runtime
+uk.ipAccessControl.addAllow("10.0.0.50");
+uk.ipAccessControl.removeAllow("192.168.1.100");
+
+// Check current lists
+console.log("Allowed IPs:", uk.ipAccessControl.getAllow());
+console.log("Denied IPs:", uk.ipAccessControl.getDeny());
+```
+
+### Persistent IP Control (Database)
+
+Store IP rules in your database:
+
+```ts
+import { PostgresKeyStore, ipAccessControlKeystore } from "usefulkey";
+
+const uk = usefulkey({
+  adapters: {
+    keyStore: new PostgresKeyStore(pool),
+  },
+}, {
+  plugins: [
+    ipAccessControlKeystore({
+      allow: ["203.0.113.1"]
+    })
+  ]
+});
+
+// Changes persist in database
+await uk.ipAccessControlStore.addAllow("203.0.113.2");
+await uk.ipAccessControlStore.addDeny("198.51.100.1");
+```
+
+## Usage Limits Per Key
+
+Limit how many times each key can be used.
+
+```ts
+import { usageLimitsPerKey } from "usefulkey";
+
+const uk = usefulkey({
+  adapters: {
+    keyStore: new MemoryKeyStore(),
+  },
+}, {
+  plugins: [
+    usageLimitsPerKey()
+  ]
+});
+
+// Create a key with 100 uses
+const { result: keyData } = await uk.createKey({
+  usesRemaining: 100
+});
+
+// Use the key multiple times
+for (let i = 0; i < 105; i++) {
+  const { result: verification } = await uk.verifyKey({
+    key: keyData.key
+  });
+
+  if (verification.valid) {
+    console.log(`Use ${i + 1}: ✓ Allowed`);
+  } else {
+    console.log(`Use ${i + 1}: ✗ ${verification.reason}`);
+  }
+}
+
+// Check remaining uses
+const remaining = await uk.getUsesRemaining(keyData.id);
+console.log(`Uses remaining: ${remaining}`);
+
+// Add more uses
+await uk.topUpUses(keyData.id, 50);
+console.log(`After top-up: ${await uk.getUsesRemaining(keyData.id)}`);
+```
+
+## Permissions and Scopes
+
+Control what each key can access using scopes.
+
+```ts
+import { permissionsScopes } from "usefulkey";
+
+const uk = usefulkey({
+  adapters: {
+    keyStore: new MemoryKeyStore(),
+  },
+}, {
+  plugins: [
+    permissionsScopes()
+  ]
+});
+
+// Create keys with different permissions
+const { result: adminKey } = await uk.createKey();
+const { result: userKey } = await uk.createKey();
+
+// Give admin key all permissions
+await uk.grantScopes(adminKey.id, ["read", "write", "delete"]);
+
+// Give user key limited permissions
+await uk.grantScopes(userKey.id, ["read", "write"]);
+
+// Verify with scope requirements
+const { result: adminCheck } = await uk.verifyKey({
+  key: adminKey.key,
+  scopes: ["read", "delete"]  // Requires both scopes
+});
+
+const { result: userCheck } = await uk.verifyKey({
+  key: userKey.key,
+  scopes: ["read", "delete"]  // User doesn't have "delete"
+});
+
+console.log(`Admin access: ${adminCheck.valid}`); // true
+console.log(`User access: ${userCheck.valid}`);   // false (insufficient_scope)
+```
+
+## Enable/Disable Keys
+
+Temporarily disable keys without deleting them.
+
+```ts
+import { enableDisable } from "usefulkey";
+
+const uk = usefulkey({
+  adapters: {
+    keyStore: new MemoryKeyStore(),
+  },
+}, {
+  plugins: [
+    enableDisable()
+  ]
+});
+
+// Create and disable a key
+const { result: keyData } = await uk.createKey();
+
+await uk.disableKey(keyData.id);
+
+const { result: disabledCheck } = await uk.verifyKey({ key: keyData.key });
+console.log(`Disabled key valid: ${disabledCheck.valid}`); // false
+
+// Re-enable the key
+await uk.enableKey(keyData.id);
+
+const { result: enabledCheck } = await uk.verifyKey({ key: keyData.key });
+console.log(`Enabled key valid: ${enabledCheck.valid}`); // true
+```
+
+## Complete Access Control Example
+
+```ts
+import {
+  usefulkey,
+  MemoryKeyStore,
+  ipAccessControlMemory,
+  usageLimitsPerKey,
+  permissionsScopes,
+  enableDisable
+} from "usefulkey";
+
+async function accessControlExample() {
+  const uk = usefulkey({
+    adapters: {
+      keyStore: new MemoryKeyStore(),
+    },
+  }, {
+    plugins: [
+      ipAccessControlMemory({ allow: ["192.168.1.100"] }),
+      usageLimitsPerKey(),
+      permissionsScopes(),
+      enableDisable()
+    ]
+  });
+
+  // Create a premium user key
+  const { result: premiumKey } = await uk.createKey({
+    usesRemaining: 1000,
+    metadata: { plan: "premium" }
+  });
+
+  // Set up permissions
+  await uk.grantScopes(premiumKey.id, ["read", "write", "premium"]);
+
+  console.log("=== Testing Premium Key ===");
+
+  // Test from allowed IP
+  const { result: ipAllowed } = await uk.verifyKey({
+    key: premiumKey.key,
+    ip: "192.168.1.100",
+    scopes: ["read", "premium"]
+  });
+  console.log(`IP allowed: ${ipAllowed.valid}`);
+
+  // Test from blocked IP
+  const { result: ipBlocked } = await uk.verifyKey({
+    key: premiumKey.key,
+    ip: "10.0.0.1",
+    scopes: ["read"]
+  });
+  console.log(`IP blocked: ${ipBlocked.valid} (${ipBlocked.reason})`);
+
+  // Test insufficient scopes
+  const { result: scopeFail } = await uk.verifyKey({
+    key: premiumKey.key,
+    ip: "192.168.1.100",
+    scopes: ["admin"]  // Key doesn't have admin scope
+  });
+  console.log(`Scope fail: ${scopeFail.valid} (${scopeFail.reason})`);
+
+  // Disable the key
+  await uk.disableKey(premiumKey.id);
+  const { result: disabled } = await uk.verifyKey({
+    key: premiumKey.key,
+    ip: "192.168.1.100"
+  });
+  console.log(`Disabled: ${disabled.valid} (${disabled.reason})`);
+}
+
+accessControlExample();
+```
+
+## Plugin Combinations
+
+You can combine multiple plugins for complex access control:
+
+```ts
+const uk = usefulkey({
+  adapters: {
+    keyStore: new MemoryKeyStore(),
+    rateLimitStore: new MemoryRateLimitStore(),
+  },
+}, {
+  plugins: [
+    // Rate limiting
+    ratelimit({ default: { kind: "fixed", limit: 100, duration: "1m" } }),
+
+    // IP control
+    ipAccessControlMemory({ allow: ["192.168.1.0/24"] }),
+
+    // Usage limits
+    usageLimitsPerKey(),
+
+    // Permissions
+    permissionsScopes(),
+
+    // Enable/disable
+    enableDisable()
+  ]
+});
+```
+
+Each plugin adds its own layer of control, and all must pass for verification to succeed.

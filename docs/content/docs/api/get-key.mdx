@@ -1,0 +1,41 @@
+---
+title: getKey
+description: Retrieve a key record by plaintext key (hashed under the hood).
+---
+
+### Description
+
+Looks up a key record using the plaintext key value. The function hashes the input key and searches for a matching record in the store. This is primarily used for administrative purposes when you still have access to the plaintext key, such as during migrations or debugging. For regular authentication, use `verifyKey` instead.
+
+### Signature
+
+```ts
+getKey(key: string): Promise<Result<KeyRecord | null>>
+```
+
+### Parameters
+
+- **key**: plaintext key value.
+
+### Returns
+
+`Promise<Result<KeyRecord | null>>`
+
+### Behavior
+
+- Hashes the input using configured hasher (HMAC when `secret` provided).
+- If expired and `autoDeleteExpiredKeys` is enabled, tries to remove it and returns `null`.
+
+### Examples
+
+Look up a key by plaintext value:
+
+```ts
+const { result } = await uk.getKey("uk_live_abc123...");
+if (result) {
+  console.log(result.id); // key ID
+  console.log(result.userId); // associated user
+}
+```
+
+

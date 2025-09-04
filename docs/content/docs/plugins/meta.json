@@ -1,0 +1,15 @@
+{
+	"title": "Plugins",
+	"pages": [
+		"rate-limit",
+		"enable-disable",
+		"ip-access-control",
+		"usage-limits",
+		"permissions-scopes",
+		"ip-access-control-memory",
+		"ip-access-control-static",
+		"ip-access-control-keystore",
+		"usage-limits-per-key",
+		"..."
+	]
+}

@@ -1,0 +1,64 @@
+---
+title: Keys
+description: How keys work in UsefulKey. You can choose the default format, control the prefix, and specify a custom generator.
+---
+
+## Built-in kinds
+
+There are a few built-in key kinds that you can choose from.
+
+- KEY.URLSafe safe to include in URLs and HTTP headers
+  - Example: `uk_abc123def456ghi789jkl012mno345pqr678stu901vwx234yz`
+- KEY.Hex lowercase hexadecimal characters
+  - Example: `uk_a1b2c3d4e5f6789012345678901234567890abcdef`
+- KEY.Base32 Crockford Base32 alphabet
+  - Example: `uk_ABCDEFGHIJKLMNOPQRSTUVWXYZ234567`
+- KEY.UUID Universally Unique Identifier (version 4)
+  - Example: `uk_550e8400-e29b-41d4-a716-446655440000`
+
+
+You can use them anywhere in your code. Each helper returns a string.
+
+Here is an example setting the default key kind to `KEY.URLSafe(40)`:
+
+```ts
+import { usefulkey, KEY } from 'usefulkey';
+
+const uk = usefulkey({ defaultKeyKind: KEY.URLSafe(40), keyPrefix: 'uk' });
+```
+
+## Prefix control
+
+The KEY functions allow you to optionally specify a prefix. The returned string will include the prefix.
+
+```ts
+const key = KEY.URLSafe(40, 'coolPrefix');
+// 'coolPrefix_xxxxxxxxxx'
+```
+
+
+
+## Custom generation
+
+You can provide a completely custom generator to the UsefulKey instance. This is useful if you want a different format for your keys or have specific requirements.
+
+
+```ts
+const uk = usefulkey({
+  customGenerateKey: () => `${Date.now()}-${crypto.randomUUID()}`,
+});
+```
+
+## Security considerations
+
+- We recommend using a prefix for your keys. This helps you identify where a key comes from.
+- You can set a secret when you create the [instance](/docs/concepts/configuration#secret). This will use a secret-based hash (HMAC with SHA-256) for hashing/verification.
+
+
+## General recommendations
+
+- Public APIs: URL-safe, random, 32–56 chars.
+- Internal services: Hex 32+ or URL-safe 32+.
+- Prefer stable prefixes per environment (e.g., `uk`, `company`).
+
+

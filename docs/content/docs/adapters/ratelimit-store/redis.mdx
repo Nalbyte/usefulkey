@@ -1,0 +1,45 @@
+---
+title: Redis
+description: Redis-based rate limiting for distributed systems.
+---
+
+### Overview
+
+- Redis-based rate limit store for distributed environments.
+- Uses keys per `(namespace, identifier)` for fixed windows and a token bucket.
+
+### Usage
+
+```ts
+import { createClient } from "redis";
+import { RedisRateLimitStore, usefulkey } from "usefulkey";
+
+const client = createClient({ url: process.env.REDIS_URL });
+await client.connect();
+
+const rateLimitStore = new RedisRateLimitStore(client, { keyPrefix: "usefulkey:rl" });
+
+const uk = usefulkey({ adapters: { rateLimitStore } });
+```
+
+### Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `keyPrefix` | `string` | `"usefulkey:rl"` | Namespace prefix for counters and token buckets. |
+
+### Client compatibility
+
+- This has been tested with `redisio`.
+- This adapter automatically adapts `redisio` Client instances for proper TypeScript compatibility.
+- You are welcome to submit PRs for other Redis clients. See [contribution guide](/docs/additional-info/contributing) for more information.
+- Other clients may work but have not been tested.
+
+- Fixed window prefers `eval`; falls back to `incr` + `pexpire`.
+- Token bucket prefers `eval`; falls back to `get`/`set`.
+
+### Keys
+
+- Fixed window: `"<keyPrefix>:<namespace>:<identifier>"` with an expiration time
+- Token bucket: same key storing `"<tokens>:<lastRefillMs>"`
+

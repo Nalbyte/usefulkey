@@ -1,0 +1,66 @@
+---
+title: Postgres
+description: Postgres-backed keystore adapter.
+---
+
+### Overview
+
+- Postgres-backed keystore that accepts any `pg`-like client exposing `query(sql, params?)`.
+- Creates the table and indexes if they do not exist.
+- `metadata` can be stored as `TEXT` (default) or `JSONB` when `useJsonbMetadata` is enabled.
+
+### Usage
+
+```ts
+import { Client } from "pg";
+import { PostgresKeyStore, usefulkey } from "usefulkey";
+
+const client = new Client({ connectionString: process.env.DATABASE_URL });
+await client.connect();
+
+const keyStore = new PostgresKeyStore(client, {
+  tableName: "usefulkey_keys",
+  useJsonbMetadata: true,
+});
+
+const uk = usefulkey({ adapters: { keyStore } });
+```
+
+### Client compatibility
+
+- This has been tested with `pg` and `postgres.js`.
+- This adapter automatically adapts `pg` and `postgres.js` Client instances for proper TypeScript compatibility.
+- You are welcome to submit PRs for other Postgres clients. See [contribution guide](/docs/additional-info/contributing) for more information.
+- Other clients may work but have not been tested.
+
+### Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `tableName` | `string` | `"usefulkey_keys"` | Name of the table to store keys. |
+| `useJsonbMetadata` | `boolean` | `false` | When `true`, uses a `JSONB` column and casts to `::jsonb` on writes; otherwise stores metadata as `TEXT`. |
+
+### Schema
+
+```sql
+CREATE TABLE IF NOT EXISTS usefulkey_keys (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  prefix TEXT NOT NULL,
+  key_hash TEXT NOT NULL UNIQUE,
+  created_at BIGINT NOT NULL,
+  expires_at BIGINT,
+  metadata JSONB,
+  uses_remaining INTEGER,
+  revoked_at BIGINT
+);
+CREATE INDEX IF NOT EXISTS idx_usefulkey_keys_user_id ON usefulkey_keys(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_usefulkey_keys_key_hash ON usefulkey_keys(key_hash);
+```
+
+### Notes
+
+- When `useJsonbMetadata` is `false` (default), `metadata` is stored as serialized JSON text in a `TEXT` column.
+- When `useJsonbMetadata` is `true`, `metadata` is stored in a `JSONB` column; passing plain JS objects works transparently.
+- `created_at`, `expires_at`, and `revoked_at` are epoch milliseconds.
+

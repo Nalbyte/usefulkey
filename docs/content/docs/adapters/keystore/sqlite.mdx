@@ -1,0 +1,61 @@
+---
+title: SQLite
+description: File-backed keystore adapter using SQLite.
+---
+
+### Overview
+
+- SQLite-backed keystore that targets a `better-sqlite3`-like API.
+- On first use, it creates the required table and indexes (via `exec` if available, or by running statements one-by-one).
+- `metadata` is stored as JSON text for portability.
+
+### Usage
+
+```ts
+import Database from "better-sqlite3";
+import { SqliteKeyStore, usefulkey } from "usefulkey";
+
+const db = new Database("usefulkey.db");
+
+const keyStore = new SqliteKeyStore(db, { tableName: "usefulkey_keys" });
+
+const uk = usefulkey({ adapters: { keyStore } });
+```
+
+### Client compatibility
+
+- This has been tested with `better-sqlite3`.
+- This adapter automatically adapts `better-sqlite3` Database instances for proper TypeScript compatibility.
+- You are welcome to submit PRs for other SQLite clients. See [contribution guide](/docs/additional-info/contributing) for more information.
+
+### Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `tableName` | `string` | `"usefulkey_keys"` | Name of the table to store keys. |
+
+### Schema
+
+```sql
+CREATE TABLE IF NOT EXISTS usefulkey_keys (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  prefix TEXT NOT NULL,
+  key_hash TEXT NOT NULL UNIQUE,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER,
+  metadata TEXT,
+  uses_remaining INTEGER,
+  revoked_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_usefulkey_keys_user_id ON usefulkey_keys(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_usefulkey_keys_key_hash ON usefulkey_keys(key_hash);
+```
+
+We plan to support custom schemas in the future.
+
+### Notes
+
+- `metadata` is stored as serialized JSON text.
+- `created_at`, `expires_at`, and `revoked_at` are epoch milliseconds.
+

@@ -1,0 +1,296 @@
+---
+title: Configuration
+description: How to configure UsefulKey.
+---
+
+UsefulKey is configured when you create an instance with `usefulkey(config, { plugins })`. This page explains the available options, sensible defaults, and common setup patterns.
+
+## The config object
+
+```ts
+import type { UsefulKeyConfig } from "usefulkey";
+
+// All fields are optional; safe defaults are applied.
+const config: UsefulKeyConfig = {
+  // Key formatting
+  keyPrefix: "uk",            // default: "uk"
+  disablePrefix: false,        // default: false
+  defaultKeyKind: KEY.URLSafe(40),
+
+  // Infrastructure adapters (storage, rate limits, analytics)
+  adapters: {
+    keyStore: new MemoryKeyStore(),          // in-memory by default
+    rateLimitStore: new MemoryRateLimitStore(),
+    analytics: new ConsoleAnalytics(),
+  },
+
+  // Crypto provider and custom behaviors (optional)
+  crypto: globalThis.crypto,                           // or Node's crypto
+  secret: process.env.UK_SECRET,                       // enable secret-based hashing (HMAC with SHA-256)
+  customHashKey: (key) => key,                         // override hashing entirely (takes precedence over secret)
+  customGenerateKey: () => "my-custom-key",            // override generator
+  customIdGenerator: () => "my_custom_id",             // override id
+
+  autoDeleteExpiredKeys: false,                        // default: false; hard-delete expired keys on access when true
+};
+```
+
+Defaults applied at runtime:
+
+- **keyPrefix**: `"uk"`
+- **defaultKeyKind**: `KEY.URLSafe(40)`
+- **disablePrefix**: `false`
+- **adapters**: in-memory key store, in-memory rate limit store, console analytics
+- **autoDeleteExpiredKeys**: `false`
+- **secret**: Not set so wont use HMAC hashing
+
+Note: the rendered key's prefix is controlled by `keyPrefix` and `disablePrefix`.
+
+See the list of supported adapters in [Adapters](/docs/adapters), and plugin features in [Plugins](/docs/plugins).
+
+## Minimal setup
+
+```ts
+import { usefulkey } from "usefulkey";
+
+const uk = usefulkey({});
+```
+
+You get an instance backed by in-memory adapters, suitable for local development, tests, and examples.
+
+## Typical development setup (in-memory to start)
+
+```ts
+import { usefulkey, KEY, MemoryKeyStore, MemoryRateLimitStore, ConsoleAnalytics } from "usefulkey";
+
+export const uk = usefulkey({
+  keyPrefix: "uk",
+  defaultKeyKind: KEY.URLSafe(40),
+  adapters: {
+    keyStore: new MemoryKeyStore(),
+    rateLimitStore: new MemoryRateLimitStore(),
+    analytics: new ConsoleAnalytics(),
+  },
+});
+```
+
+## Centralized instance in `lib/usefulkey.ts`
+
+We recommend a centralised instance of UsefulKey in `lib/usefulkey.ts` and import it where needed:
+
+```ts
+// lib/usefulkey.ts
+import { usefulkey, KEY, MemoryKeyStore, MemoryRateLimitStore, ConsoleAnalytics, ratelimit, ipAccessControlStatic, ipAccessControlKeystore, usageLimitsPerKeyPlugin } from "usefulkey";
+
+export const uk = usefulkey(
+  {
+    keyPrefix: "uk",
+    defaultKeyKind: KEY.URLSafe(40),
+    adapters: {
+      keyStore: new MemoryKeyStore(),
+      rateLimitStore: new MemoryRateLimitStore(),
+      analytics: new ConsoleAnalytics(),
+    },
+  },
+  {
+    plugins: [
+      ratelimit({ default: { kind: "fixed", limit: 100, duration: "1m" } }),
+      ipAccessControlStatic({ allow: [], deny: [] }),
+      ipAccessControlKeystore(),
+      usageLimitsPerKeyPlugin(),
+    ],
+  }
+);
+```
+
+Then elsewhere:
+
+```ts
+import { uk } from "./lib/usefulkey";
+
+const created = await uk.createKey({ userId: "u1", metadata: { plan: "pro" } });
+const verified = await uk.verifyKey({ key: created.result.key, identifier: "127.0.0.1" });
+```
+
+## Configuring adapters (production)
+
+Swap in persistent adapters when you deploy to production. 
+
+```ts
+import { usefulkey, PostgresKeyStore, RedisRateLimitStore, ConsoleAnalytics } from "usefulkey";
+
+const pgClient = new Pool({
+  connectionString: process.env.DATABASE_URL,  
+});
+
+const redisClient = new Redis({
+  url: process.env.REDIS_URL,
+});
+
+const uk = usefulkey({
+  keyPrefix: "uk",
+  defaultKeyKind: KEY.URLSafe(40),
+  secret: process.env.UK_SECRET, // We recommend setting a secret in production
+  adapters: {
+    keyStore: new PostgresKeyStore({
+      pgClient
+    }),
+    rateLimitStore: new RedisRateLimitStore({
+      redisClient
+    }),
+    analytics: new ConsoleAnalytics(),
+  },
+});
+```
+
+For a complete list and details, see the adapter pages:
+
+- Key store: [/docs/adapters/keystore](/docs/adapters/keystore)
+- Rate limit store: [/docs/adapters/ratelimit-store](/docs/adapters/ratelimit-store)
+- Analytics: [/docs/adapters/analytics](/docs/adapters/analytics)
+
+## Disabling analytics
+
+UsefulKey emits analytics events by default using the Console adapter. To disable analytics entirely, supply the Noop adapter:
+
+```ts
+import { usefulkey } from "usefulkey";
+
+const uk = usefulkey({
+  adapters: {
+    analytics: new NoopAnalytics(),
+  },
+});
+```
+
+## Adding plugins
+
+Plugins are provided as the second argument to the config object and can enforce policies or extend the instance with helpers.
+
+```ts
+import { usefulkey, enableDisablePlugin, permissionsScopesPlugin, ratelimit, usageLimitsPerKeyPlugin } from "usefulkey";
+
+const uk = usefulkey(
+  {},
+  {
+    plugins: [
+      enableDisablePlugin(),
+      permissionsScopesPlugin({ metadataKey: "scopes" }),
+      ratelimit({ default: { kind: "fixed", limit: 100, duration: "1m" } }),
+      usageLimitsPerKeyPlugin(),
+    ],
+  }
+);
+```
+
+See [Plugins](/docs/plugins) for all built-ins and usage examples.
+
+## Config Options
+
+### defaultKeyKind
+Choose the default key format.
+
+  ```ts
+  import { KEY } from "usefulkey";
+  const uk = usefulkey({ defaultKeyKind: KEY.URLSafe(56) });
+  ```
+
+### keyPrefix and disablePrefix
+Control the rendered key prefix.
+
+  ```ts
+  const uk = usefulkey({ keyPrefix: "acme", disablePrefix: false });
+  // e.g. acme_xxxxxxxxxx
+  ```
+
+### customGenerateKey()
+Fully override how plaintext keys are generated.
+
+  ```ts
+  const uk = usefulkey({
+    customGenerateKey: () => `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  });
+  ```
+
+### secret
+When set, UsefulKey uses a secret-based hash (HMAC using SHA-256) for hashing/verification. This improves resistance to offline guessing if your database is exposed. See the [Security](/docs/concepts/security) section for how to generate and manage the secret key.
+
+```ts
+const uk = usefulkey({ secret: process.env.UK_SECRET });
+```
+
+### customHashKey(key)
+Override hashing entirely. Takes precedence over `secret`. Hashes must be stable and collision-resistant.
+
+  ```ts
+  import crypto from "node:crypto";
+
+  const uk = usefulkey({
+    secret: process.env.UK_SECRET,
+    customHashKey: (key) => crypto.createHash("sha256").update(key).digest("hex"),
+  });
+  ```
+
+### customIdGenerator()
+Override the default unique identifier used for key ids.
+
+  ```ts
+  const uk = usefulkey({ customIdGenerator: () => `k_${crypto.randomUUID()}` });
+  ```
+
+### autoDeleteExpiredKeys
+Automatically delete expired keys on access.
+
+  ```ts
+  const uk = usefulkey({ autoDeleteExpiredKeys: true });
+  ```
+
+
+## Crypto provider
+
+You can pass one of the following as `config.crypto`:
+
+- Node-style object (has `createHash`, optional `randomUUID`, `randomBytes`, and optional `webcrypto`):
+
+  ```ts
+  import nodeCrypto from "node:crypto";
+  const uk = usefulkey({ crypto: nodeCrypto });
+  ```
+
+- Web Crypto-like object (has `getRandomValues`, optional `randomUUID`):
+
+  ```ts
+  const uk = usefulkey({ crypto: globalThis.crypto });
+  ```
+
+- Partial provider to override specific primitives:
+
+  ```ts
+  import { sha256 } from "js-sha256";
+
+  const uk = usefulkey({
+    crypto: {
+      hashSha256: (input: string) => sha256(input),
+      getRandomValues: (arr: Uint8Array) => globalThis.crypto.getRandomValues(arr),
+      randomUUID: () => globalThis.crypto.randomUUID(),
+    },
+  });
+  ```
+
+UsefulKey expects these functions when you pass a partial crypto provider:
+
+```ts
+type CryptoProvider = {
+  hashSha256(input: string): string;
+  getRandomValues(array: Uint8Array): Uint8Array;
+  randomUUID(): string;
+}
+```
+
+## Setup readiness
+
+Some plugins and adapters perform async setup. You can optionally await `uk.ready` before first use:
+
+```ts
+await uk.ready; // resolves once all plugin setup hooks finish
+```

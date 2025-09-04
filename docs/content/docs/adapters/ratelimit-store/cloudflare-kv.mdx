@@ -1,0 +1,49 @@
+---
+title: Cloudflare KV
+description: Cloudflare KV-backed fixed window and token bucket store.
+---
+
+### Overview
+
+- Rate limit store implemented on Cloudflare KV for Workers.
+- Uses per-identifier keys with an expiration time for fixed windows; stores token bucket state as a string.
+
+### Usage
+
+```ts
+import { CloudflareKvRateLimitStore, usefulkey } from "usefulkey";
+
+export default {
+  async fetch(req: Request, env: { RATE_LIMIT_KV: KVNamespace }) {
+    const rateLimitStore = new CloudflareKvRateLimitStore(env.RATE_LIMIT_KV, {
+      keyPrefix: "usefulkey:rl",
+    });
+    const uk = usefulkey({ adapters: { rateLimitStore } });
+    // ...
+    return new Response("OK");
+  }
+};
+```
+
+### Client compatibility
+
+- This has been tested with Cloudflare KV.
+
+### Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `keyPrefix` | `string` | `"usefulkey:rl"` | Namespace prefix for counters and token buckets. |
+
+### Keys
+
+- Fixed window: `"<keyPrefix>:<namespace>:<identifier>"` with `expirationTtl` set to the window length in seconds
+- Token bucket: same key storing `"<tokens>:<lastRefillMs>"`
+
+### Limitations
+
+- KV does not provide a way to read the remaining time-to-live; the adapter approximates `reset` by adding the full window on each increment.
+- Under contention, windows may skew slightly strict because TTL is reset on each write.
+ - Under heavy usage, windows may skew slightly strict because the expiration time is refreshed on each write.
+
+

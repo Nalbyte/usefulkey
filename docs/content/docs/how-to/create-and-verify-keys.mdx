@@ -1,0 +1,115 @@
+---
+title: Create and Verify Keys
+description: Learn the basics of creating and verifying API keys with UsefulKey.
+---
+
+## Basic Key Creation and Verification
+
+The most common task with UsefulKey is creating keys and checking if they're valid. Here's how to do it.
+
+### Step 1: Set Up UsefulKey
+
+First, create a UsefulKey instance with basic configuration:
+
+```ts
+import { usefulkey, MemoryKeyStore } from "usefulkey";
+
+const uk = usefulkey({
+  adapters: {
+    keyStore: new MemoryKeyStore(),
+  },
+});
+```
+
+### Step 2: Create a Key
+
+Create a new API key with optional metadata:
+
+```ts
+const { result: keyData } = await uk.createKey({
+  metadata: { user: "john@example.com" }
+});
+
+console.log(keyData);
+// {
+//   id: "abc123...",
+//   key: "uk_ABC123def456...",  // This is the actual API key
+//   metadata: { user: "john@example.com" }
+// }
+```
+
+### Step 3: Verify a Key
+
+Check if a key is valid:
+
+```ts
+const { result: verification } = await uk.verifyKey({
+  key: keyData.key
+});
+
+console.log(verification);
+// {
+//   valid: true,
+//   keyId: "abc123...",
+//   userId: null,
+//   metadata: { user: "john@example.com" }
+// }
+```
+
+### Step 4: Handle Invalid Keys
+
+When a key is invalid, you'll get details about why:
+
+```ts
+const { result: invalidResult } = await uk.verifyKey({
+  key: "invalid-key"
+});
+
+console.log(invalidResult);
+// {
+//   valid: false,
+//   reason: "not_found"
+// }
+```
+
+### Common Reasons for Invalid Keys
+
+- `"not_found"` - The key doesn't exist
+- `"expired"` - The key has passed its expiration date
+- `"revoked"` - The key has been revoked
+- `"usage_exceeded"` - The key has been used too many times
+
+### Complete Example
+
+```ts
+import { usefulkey, MemoryKeyStore } from "usefulkey";
+
+async function example() {
+  // Set up
+  const uk = usefulkey({
+    adapters: {
+      keyStore: new MemoryKeyStore(),
+    },
+  });
+
+  // Create a key
+  const { result: keyData } = await uk.createKey({
+    metadata: { plan: "premium" }
+  });
+
+  // Verify it works
+  const { result: verification } = await uk.verifyKey({
+    key: keyData.key
+  });
+
+  if (verification.valid) {
+    console.log("Key is valid! User plan:", verification.metadata?.plan);
+  } else {
+    console.log("Key is invalid:", verification.reason);
+  }
+}
+
+example();
+```
+
+This covers the core workflow: create keys, verify them, and handle the results.

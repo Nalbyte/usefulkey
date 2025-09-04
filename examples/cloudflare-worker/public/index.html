@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>UsefulKey Cloudflare Worker</title>
+	</head>
+	<body>
+		<h1>UsefulKey Cloudflare Worker</h1>
+		<p>Use the buttons below to call the worker endpoints.</p>
+		<button id="create" type="button">Create Key</button>
+		<pre id="key"></pre>
+		<button id="verify" type="button">Verify Key</button>
+		<pre id="verifyRes"></pre>
+		<script>
+			const createBtn = document.getElementById("create");
+			const verifyBtn = document.getElementById("verify");
+			const keyOut = document.getElementById('key');
+			const verifyOut = document.getElementById('verifyRes');
+
+			let lastKey = '';
+			createBtn.addEventListener("click", () => {
+				fetch('/keys', { method: 'POST' })
+					.then((resp) => resp.json())
+					.then((json) => {
+						lastKey = json.key;
+						keyOut.textContent = JSON.stringify(json, null, 2);
+					});
+			});
+
+			verifyBtn.addEventListener("click", () => {
+				fetch('/verify', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key: lastKey }) })
+					.then((resp) => resp.json())
+					.then((json) => {
+						verifyOut.textContent = JSON.stringify(json, null, 2);
+					});
+			});
+		</script>
+	</body>
+</html>

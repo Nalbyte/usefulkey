@@ -1,0 +1,32 @@
+---
+title: UsefulKey
+description: Simple, self-hosted API key generation and verification.
+
+---
+
+UsefulKey is a small, extensible library for generating, storing, verifying, and revoking API keys. It ships with a lightweight plugin system and swappable adapters for your infrastructure.
+
+It can be used as a single in-process service in your app, or paired with your own HTTP layer to run a central key service. It's designed to be easy to use and extend, with a focus on simplicity and flexibility.
+
+## Features
+- Key generation with prefixing
+- Pluggable storage and rate limit backends (see [Adapters](/docs/adapters))
+- Plugins: rate limiting, IP access control, usage limits per key, permissions/scopes, enable/disable keys (see [Plugins](/docs/plugins))
+- Analytics for storing audit history and usage metrics
+- Write your own plugins and adapters to extend the functionality with ease
+
+## Why?
+
+I built UsefulKey because I was tired of dealing with key management for each new project I created. The current solutions were overkill for what I actually needed. Most solutions were either not designed for just keys or tied to specific providers.
+
+There are tons of great solutions out there, but most of them felt like overkill for what I actually needed.
+
+UsefulKey is a simple library that does one thing - managing API keys without the hassle. It's lightweight and works with whatever infrastructure you're using.
+## Install
+
+``` npm
+npm i usefulkey
+```
+
+See [Configuration](/docs/concepts/configuration) and the [API Reference](/docs/api/verify-key) for more information.
+

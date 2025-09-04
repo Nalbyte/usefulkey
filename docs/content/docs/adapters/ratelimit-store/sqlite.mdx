@@ -1,0 +1,63 @@
+---
+title: SQLite
+description: File-backed rate limit store.
+---
+
+### Overview
+
+- SQLite-backed rate limit store implementing fixed windows and token bucket.
+- Targets a `better-sqlite3`-like API and creates required tables/indexes on first use.
+
+### Usage
+
+```ts
+import Database from "better-sqlite3";
+import { SqliteRateLimitStore, usefulkey } from "usefulkey";
+
+const db = new Database("usefulkey.db");
+
+const rateLimitStore = new SqliteRateLimitStore(db, {
+  tableName: "usefulkey_rate_limits",
+});
+
+const uk = usefulkey({ adapters: { rateLimitStore } });
+```
+
+### Client compatibility
+
+- This has been tested with `better-sqlite3`.
+- This adapter automatically adapts `better-sqlite3` Database instances for proper TypeScript compatibility.
+- You are welcome to submit PRs for other SQLite clients. See [contribution guide](/docs/additional-info/contributing) for more information.
+- Other clients may work but have not been tested.
+
+### Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `tableName` | `string` | `"usefulkey_rate_limits"` | Base table name for fixed windows (bucket table is suffixed with `_buckets`). |
+
+### Tables
+
+```sql
+CREATE TABLE IF NOT EXISTS usefulkey_rate_limits (
+  namespace TEXT NOT NULL,
+  identifier TEXT NOT NULL,
+  count INTEGER NOT NULL,
+  reset INTEGER NOT NULL,
+  PRIMARY KEY(namespace, identifier)
+);
+CREATE INDEX IF NOT EXISTS idx_usefulkey_rate_limits_reset ON usefulkey_rate_limits(reset);
+
+CREATE TABLE IF NOT EXISTS usefulkey_rate_limits_buckets (
+  namespace TEXT NOT NULL,
+  identifier TEXT NOT NULL,
+  tokens REAL NOT NULL,
+  lastRefill INTEGER NOT NULL,
+  capacity INTEGER NOT NULL,
+  refillTokens REAL NOT NULL,
+  refillIntervalMs INTEGER NOT NULL,
+  PRIMARY KEY(namespace, identifier)
+);
+CREATE INDEX IF NOT EXISTS idx_usefulkey_rate_limits_buckets_lastRefill ON usefulkey_rate_limits_buckets(lastRefill);
+```
+

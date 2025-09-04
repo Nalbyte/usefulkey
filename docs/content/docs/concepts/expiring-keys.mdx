@@ -1,0 +1,94 @@
+---
+title: Key Expiration
+description: How key expiration works in UsefulKey.
+---
+
+### Overview
+
+UsefulKey supports time-based expiration on API keys via the `expiresAt` field. If a key has an `expiresAt` timestamp and it is in the past or exactly equal to the current time, verification fails with reason `"expired"`. If `expiresAt` is omitted or `null`, the key never expires.
+
+
+Note: Expiration timestamp is in milliseconds since epoch.
+
+
+### Setting an expiration when creating a key
+
+```ts
+const oneDayMs = 24 * 60 * 60 * 1000;
+
+const { result: created, error } = await uk.createKey({
+  userId: "user_123",
+  // expires in 24 hours
+  expiresAt: Date.now() + oneDayMs,
+});
+
+// created?.key → plaintext key to return/store client-side
+```
+
+- **Never expiring**: simply omit `expiresAt` or set it to `null`.
+- **Immediate expiry**: set `expiresAt: Date.now()` to make a key immediately invalid (useful for test cases).
+
+### What happens during verification
+
+When `uk.verifyKey({ key })` runs, UsefulKey loads the record and checks, in order:
+
+1. `revokedAt` → returns `reason: "revoked"` if present
+2. `expiresAt` → returns `reason: "expired"` when `expiresAt <= now()`
+3. `usesRemaining` (if configured) → returns `reason: "usage_exceeded"` when `<= 0`
+
+If none of the above reject, verification succeeds.
+
+### Updating an existing key’s expiration
+
+You now have a dedicated helper to extend a key’s expiry, plus the original options:
+
+- **Extend via helper**: add time relative to the current expiry (or `now()` if none).
+
+  ```ts
+  const sevenDays = 7 * 24 * 60 * 60 * 1000;
+  const { result } = await uk.extendKeyExpiry("key_id", sevenDays);
+  // result?.expiresAt → new expiry timestamp
+  ```
+
+- **Direct adapter update (advanced)**: mutate the stored record via the keystore adapter.
+
+  ```ts
+  const { result: rec } = await uk.getKeyById("key_id");
+  if (rec) await uk.keyStore.updateKey({ ...rec, expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000 });
+  ```
+
+- **Rotate**: revoke the old key and create a new one with the desired `expiresAt`.
+
+  ```ts
+  await uk.revokeKey("key_id");
+  const { result: next } = await uk.createKey({ userId: "user_123", expiresAt: /* ... */ });
+  ```
+
+Choose rotation when you also want a new plaintext value and auditability; choose the helper or adapter update when keeping the same key is important.
+
+### Storage and cleanup
+
+- Keystore adapters store `expiresAt` as epoch milliseconds (e.g., `expires_at` column in SQL adapters).
+- Expired keys are not auto-deleted by default; expiration is enforced at verification time.
+- Optional: set `autoDeleteExpiredKeys: true` in `UsefulKeyConfig` to hard-delete expired keys on access (verification or direct retrieval). Deletion failures are ignored and do not change the verification result.
+- Otherwise, you can proactively prune expired keys using the helper:
+
+  ```ts
+  // Sweep in batches of 500; only keys with expiresAt <= now() are considered
+  const { result, error } = await uk.sweepExpired({ batchSize: 500, olderThan: Date.now(), strategy: "soft_then_hard" });
+  // result?.processed, result?.revoked, result?.hardRemoved
+  ```
+
+  - `strategy: "soft_then_hard"` first marks as revoked, then hard-deletes.
+  - Use `strategy: "hard"` to skip the revoke step.
+
+  You can run this on a recurring timer or invoke it manually when convenient (e.g., during maintenance windows).
+
+### FAQs
+
+- **How do I make keys that never expire?** Omit `expiresAt` or set it to `null`.
+- **Why did my key expire on the exact timestamp?** Expiration is inclusive: `expiresAt <= now()` is expired.
+- **Time zones?** Times are epoch milliseconds from `Date.now()`; local time zones do not affect behavior.
+- **How is expiration different from revocation?** Revoked keys return `reason: "revoked"` regardless of `expiresAt`. Expired keys return `reason: "expired"` and can be made valid again only by updating `expiresAt` or rotating the key.
+
+

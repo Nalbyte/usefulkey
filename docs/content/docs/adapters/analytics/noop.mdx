@@ -1,0 +1,18 @@
+---
+title: Noop
+description: Disable analytics by using a no-op adapter.
+---
+
+```ts
+import { NoopAnalytics, usefulkey } from "usefulkey";
+
+const analytics = new NoopAnalytics();
+const uk = usefulkey({ adapters: { analytics } });
+```
+
+### Behavior
+
+- Does not emit or persist any events.
+- Useful when you want to disable analytics in certain environments.
+
+

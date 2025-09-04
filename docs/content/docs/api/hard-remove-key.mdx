@@ -1,0 +1,47 @@
+---
+title: hardRemoveKey
+description: Permanently delete a key record from the store.
+---
+
+### Description
+
+Permanently deletes a key record from the store. This operation cannot be undone and completely removes all data associated with the key, including its history and metadata. Use this when you need to completely erase a key's existence, such as for GDPR compliance, PII deletion, or cleaning up failed provisioning attempts.
+
+### Signature
+
+```ts
+hardRemoveKey(id: KeyId): Promise<Result<void>>
+```
+
+### Parameters
+
+- **id**: key identifier to delete.
+
+### Returns
+
+`Promise<Result<void>>`
+
+### Behavior
+
+- Removes record directly; sends `key.hard_removed` analytics.
+
+### Examples
+
+Delete a key permanently:
+
+```ts
+await uk.hardRemoveKey("k_123");
+console.log("Key permanently deleted");
+```
+
+Handle deletion errors:
+
+```ts
+const { error } = await uk.hardRemoveKey("k_456");
+if (error) {
+  console.error("Failed to delete key:", error.message);
+}
+```
+
+
+

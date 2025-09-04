@@ -1,0 +1,48 @@
+---
+title: sweepExpired
+description: Batch hard-delete expired keys using the store's sweep capability.
+---
+
+### Description
+
+Removes expired keys from the store in batches. This function processes expired keys and permanently deletes them to free up storage space. It's designed to be run periodically as a maintenance task to keep your key store clean and efficient. The function returns counts of how many keys were processed and removed.
+
+### Signature
+
+```ts
+sweepExpired(input?: { batchSize?: number; olderThan?: number }): Promise<Result<{ processed: number; hardRemoved: number; remainingHint?: number }>>
+```
+
+### Parameters
+
+- **batchSize?**: 1–1000 (default 100).
+- **olderThan?**: epoch ms cutoff (default now).
+
+### Returns
+
+Counts of processed, hardRemoved, and `remainingHint` (−1 when more are likely).
+
+### Requirements
+
+- The keystore must implement `findExpiredIds`. Otherwise returns an error with code `KEYSTORE_SWEEP_UNSUPPORTED`.
+
+### Examples
+
+Basic cleanup with default settings:
+
+```ts
+const { result } = await uk.sweepExpired();
+console.log(`Processed: ${result?.processed}, Removed: ${result?.hardRemoved}`);
+```
+
+Clean up with custom batch size:
+
+```ts
+const { result } = await uk.sweepExpired({ batchSize: 50 });
+if (result?.remainingHint === -1) {
+  console.log("More keys to clean up");
+}
+```
+
+
+

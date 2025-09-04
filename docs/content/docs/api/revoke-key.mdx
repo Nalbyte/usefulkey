@@ -1,0 +1,48 @@
+---
+title: revokeKey
+description: Mark a key as revoked; subsequent verify calls will fail.
+---
+
+### Description
+
+Marks an API key as revoked, which prevents it from being used for authentication while preserving its history and metadata. Once revoked, any attempt to verify the key will fail with a "revoked" reason. This is useful when you want to immediately disable a key but keep its audit trail for compliance or debugging purposes.
+
+### Signature
+
+```ts
+revokeKey(id: KeyId): Promise<Result<void>>
+```
+
+### Parameters
+
+- **id**: key identifier to revoke.
+
+### Returns
+
+`Promise<Result<void>>`
+
+### Behavior
+
+- Sets `revokedAt` on the record. Verification will return `valid: false, reason: "revoked"`.
+- Sends `key.revoked` analytics.
+
+### Examples
+
+Revoke a key immediately:
+
+```ts
+await uk.revokeKey("k_123");
+console.log("Key revoked successfully");
+```
+
+Revoke multiple keys:
+
+```ts
+const keyIds = ["k_123", "k_456", "k_789"];
+for (const id of keyIds) {
+  await uk.revokeKey(id);
+}
+```
+
+
+

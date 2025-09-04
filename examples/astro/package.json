@@ -1,0 +1,21 @@
+{
+	"name": "astro",
+	"type": "module",
+	"version": "0.0.1",
+	"scripts": {
+		"dev": "astro dev",
+		"build": "astro build",
+		"preview": "astro preview",
+		"astro": "astro"
+	},
+	"dependencies": {
+		"@astrojs/node": "^9.4.0",
+		"astro": "^5.12.9",
+		"ioredis": "^5.7.0",
+		"pg": "^8.16.3",
+		"usefulkey": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/pg": "^8.15.5"
+	}
+}

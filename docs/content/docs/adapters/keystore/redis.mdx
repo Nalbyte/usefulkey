@@ -1,0 +1,42 @@
+---
+title: Redis
+description: Redis-backed keystore adapter.
+---
+
+### Overview
+
+- Redis-backed keystore storing each record in a Redis hash keyed by id.
+- Maintains a secondary mapping from key hash to id for fast `findKeyByHash`.
+
+### Usage
+
+```ts
+import { createClient } from "redis";
+import { RedisKeyStore, usefulkey } from "usefulkey";
+
+const client = createClient({ url: process.env.REDIS_URL });
+await client.connect();
+
+const keyStore = new RedisKeyStore(client, { keyPrefix: "usefulkey" });
+
+const uk = usefulkey({ adapters: { keyStore } });
+```
+
+### Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `keyPrefix` | `string` | `"usefulkey"` | Namespace prefix for record and hash-to-id keys. |
+
+### Client compatibility
+
+- This has been tested with `redisio`.
+- This adapter automatically adapts `redisio` Client instances for proper TypeScript compatibility.
+- You are welcome to submit PRs for other Redis clients. See [contribution guide](/docs/additional-info/contributing) for more information.
+- Other clients may work but have not been tested.
+
+### Data model
+
+- Key record hash at `"<keyPrefix>:key:<id>"`
+- Mapping `"<keyPrefix>:khash:<keyHash>"` → `<id>`
+

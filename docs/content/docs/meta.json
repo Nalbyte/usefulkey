@@ -1,0 +1,13 @@
+{
+	"title": "UsefulKey",
+	"pages": [
+		"index",
+		"quick-start",
+		"concepts",
+		"api",
+		"...",
+		"examples",
+		"use-cases",
+		"additional-info"
+	]
+}

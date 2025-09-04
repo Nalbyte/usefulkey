@@ -1,0 +1,28 @@
+---
+title: Concepts
+description: Overview of UsefulKey's core concepts.
+---
+
+
+Before we get into the adapters let's quickly outline the difference between plugins and adapters.
+
+## Plugins vs Adapters
+
+Quick mental model: **Plugins decide what to do; Adapters decide where it goes**.
+
+- **Plugins (features and policies)**
+
+  - Extend UsefulKey’s behavior without touching your infrastructure.
+  - Run at specific lifecycle points (create/verify functions) to allow/deny or update state.
+  - Can also add typed properties or helpers to the `uk` instance.
+  - Examples: **rate limiting**, **IP allow/deny**, **usage limits per key**.
+  - Choose them per instance when you call `usefulkey(...)`.
+
+- **Adapters (infrastructure backends)**
+  - Tell UsefulKey where and how to persist or send data.
+  - Implement interfaces for your stack: `KeyStoreAdapter`, `RateLimitStoreAdapter`, `AnalyticsAdapter`.
+  - Swap in Postgres/Redis/your own services instead of the default in-memory versions.
+  - Choose them once at boot via the `adapters` option in `usefulkey(...)`.
+
+
+Next we'll dive into the adapters and plugins in more detail.

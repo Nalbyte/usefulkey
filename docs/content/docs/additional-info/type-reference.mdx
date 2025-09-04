@@ -1,0 +1,255 @@
+---
+title: Type Reference
+description: TypeScript types and interfaces used throughout UsefulKey documentation.
+---
+
+This page documents the TypeScript types and interfaces that are referenced throughout the UsefulKey documentation. Import these types from the main package:
+
+```ts
+import type { 
+  KeyRecord, 
+  CreateKeyResult, 
+  VerifyResult, 
+  CreateKeyInput, 
+  VerifyOptions,
+  KeyId,
+  UserId,
+  KeyKind,
+  Result,
+  UsefulKeyError
+} from "usefulkey";
+```
+
+## Core Types
+
+### KeyRecord
+
+The persisted representation of an API key. This is what gets stored in your database.
+
+```ts
+interface KeyRecord {
+  /** Stable identifier (string) for the key. */
+  id: KeyId;
+  /** Optional association to a user. */
+  userId?: UserId | null;
+  /** Prefix used when rendering the plaintext key. Empty when prefixing is disabled. */
+  prefix: string;
+  /** Hash of the plaintext key (e.g. SHA-256 or custom). */
+  keyHash: string;
+  /** Creation timestamp (epoch milliseconds). */
+  createdAt: number;
+  /** Optional expiry timestamp (epoch milliseconds). */
+  expiresAt?: number | null;
+  /** Arbitrary metadata stored alongside the key. */
+  metadata?: Record<string, unknown>;
+  /** Optional remaining usage count; omitted/null means unlimited. */
+  usesRemaining?: number | null;
+  /** Timestamp when the key was revoked, if applicable. */
+  revokedAt?: number | null;
+}
+```
+
+**Note:** The plaintext key is only returned at creation time and never persisted. Only the `keyHash` is stored for security.
+
+### CreateKeyResult
+
+The result returned when creating a new key.
+
+```ts
+interface CreateKeyResult {
+  /** Stable identifier for the key. */
+  id: KeyId;
+  /** Plaintext key (only returned on creation). */
+  key: string;
+  /** Arbitrary metadata stored alongside the key. */
+  metadata?: Record<string, unknown>;
+}
+```
+
+### VerifyResult
+
+The result returned when verifying a key.
+
+```ts
+interface VerifyResult {
+  /** Whether the key is currently valid. */
+  valid: boolean;
+  /** If invalid, a short reason string (e.g. "not_found", "expired"). */
+  reason?: string;
+  /** Resolved key id when valid. */
+  keyId?: KeyId;
+  /** Associated user id (when present on the record). */
+  userId?: UserId;
+  /** Echo of stored metadata when requested by the caller; omitted otherwise for performance. */
+  metadata?: Record<string, unknown>;
+}
+```
+
+## Input Types
+
+### CreateKeyInput
+
+Parameters for creating a new key.
+
+```ts
+interface CreateKeyInput {
+  /** Optional custom key id; defaults to a UUID. */
+  id?: KeyId;
+  /** Optional associated user id. */
+  userId?: UserId | null;
+  /** Optional prefix override when rendering the plaintext key. */
+  prefix?: string;
+  /** Optional expiry timestamp (epoch milliseconds). */
+  expiresAt?: number | null;
+  /** Optional metadata bag. */
+  metadata?: Record<string, unknown>;
+  /** Optional finite usage limit; null/omitted means unlimited. */
+  usesRemaining?: number | null;
+  /** Optional key kind override; defaults to instance `defaultKeyKind`. */
+  keyKind?: KeyKind;
+}
+```
+
+### VerifyOptions
+
+Parameters for verifying a key.
+
+```ts
+interface VerifyOptions {
+  /** Plaintext key to verify. */
+  key: string;
+  /** Optional requester IP. */
+  ip?: string;
+  /** Optional per-caller identifier. */
+  identifier?: string;
+  /** Optional logical scope for rate limits. */
+  namespace?: string;
+  /** Optional required scopes. */
+  scopes?: string[];
+  /** Optional per-call rate limit override. */
+  rateLimit?: RateLimitRequest;
+}
+```
+
+## Identifier Types
+
+### KeyId
+
+Opaque identifier for a key record.
+
+```ts
+type KeyId = string;
+```
+
+### UserId
+
+Opaque identifier for a user that owns or is associated with a key.
+
+```ts
+type UserId = string;
+```
+
+## Key Generation
+
+### KeyKind
+
+Declarative description of how a plaintext key should be generated.
+
+```ts
+type KeyKind = 
+  | { type: "hex"; length?: number; prefix?: string }
+  | { type: "base32"; length?: number; prefix?: string };
+```
+
+## Error Handling
+
+### Result
+
+Unified result type returned by all public APIs.
+
+```ts
+type Result<T> = { result?: T; error?: UsefulKeyError };
+```
+
+### UsefulKeyError
+
+Unified error shape returned by public APIs.
+
+```ts
+interface UsefulKeyError {
+  /** Error code string. */
+  code: string;
+  /** Human-readable error message. */
+  message: string;
+  /** Whether the error is retryable. */
+  retryable?: boolean;
+  /** Original error that caused this. */
+  cause?: unknown;
+  /** Additional metadata about the error. */
+  meta?: Record<string, unknown>;
+}
+```
+
+## Plugin Types
+
+### UsefulKeyPluginHooks
+
+Interface for plugin lifecycle hooks.
+
+```ts
+interface UsefulKeyPluginHooks {
+  /** Plugin name for identification. */
+  name: string;
+  /** Optional setup function called during initialization. */
+  setup?: (ctx: UsefulKey) => void | Promise<void>;
+  
+  /** Called before verification starts. */
+  beforeVerify?: (
+    ctx: UsefulKey,
+    args: {
+      key: string;
+      ip?: string;
+      identifier?: string | null;
+      namespace?: string | null;
+      rateLimit?: RateLimitRequest;
+    },
+  ) => Promise<{ reject: boolean; reason?: string } | undefined>;
+  
+  /** Called after key record is loaded but before core checks. */
+  onKeyRecordLoaded?: (
+    ctx: UsefulKey,
+    args: { input: VerifyOptions; record: KeyRecord },
+  ) => Promise<{ reject: boolean; reason?: string } | undefined>;
+  
+  /** Called after successful verification. */
+  onVerifySuccess?: (
+    ctx: UsefulKey,
+    args: { input: VerifyOptions; record: KeyRecord },
+  ) => Promise<void>;
+  
+  /** Called before key creation. */
+  beforeCreateKey?: (
+    ctx: UsefulKey,
+    args: { input: CreateKeyInput },
+  ) => Promise<{ reject: boolean; reason?: string } | undefined>;
+  
+  /** Called after key creation. */
+  onKeyCreated?: (
+    ctx: UsefulKey,
+    args: { record: KeyRecord },
+  ) => Promise<void>;
+  
+  /** Optional extension surface added to the instance. */
+  extend?: Record<string, unknown>;
+}
+```
+
+### UsefulKeyPlugin
+
+Plugin factory function type.
+
+```ts
+type UsefulKeyPlugin<Ext extends Record<string, unknown> = {}> = (
+  ctx: UsefulKey,
+) => Omit<UsefulKeyPluginHooks, "extend"> & { extend?: Ext };
+```

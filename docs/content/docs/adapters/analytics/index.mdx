@@ -1,0 +1,25 @@
+---
+title: Analytics Adapters
+description: Emit audit/usage events to your observability stack.
+---
+
+Current adapters:
+
+- [Console](/docs/adapters/analytics/console)
+- [ClickHouse](/docs/adapters/analytics/clickhouse)
+- [Noop](/docs/adapters/analytics/noop)
+
+By default, UsefulKey uses the Console analytics adapter when none is provided, so events like `key.created`, `key.verified`, etc., are logged to the console.
+To completely disable analytics, use the Noop adapter:
+
+```ts
+import { NoopAnalytics, usefulkey } from "usefulkey";
+
+const uk = usefulkey({
+  adapters: {
+    analytics: new NoopAnalytics(),
+  },
+});
+```
+
+

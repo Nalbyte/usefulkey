@@ -1,0 +1,24 @@
+{
+  "name": "usefulkey-hono-minimal",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Minimal Hono example that creates and verifies API keys with UsefulKey.",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "build": "echo \"no build step\""
+  },
+  "dependencies": {
+    "usefulkey": "workspace:*",
+    "@hono/node-server": "^1.12.2",
+    "hono": "^4.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.2.1",
+    "tsx": "^4.19.4",
+    "typescript": "^5.5.4"
+  }
+}
+
+

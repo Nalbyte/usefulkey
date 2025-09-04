@@ -1,0 +1,67 @@
+---
+title: HTTP
+description: Call out to an external HTTP API to persist and read keys.
+---
+
+### Overview
+
+- Delegates CRUD to a remote HTTP API with configurable routes, headers, and auth.
+- Can transform payloads with `serializeRecord`/`deserializeRecord` to fit your API.
+
+### Usage
+
+```ts
+import { HttpKeyStore, usefulkey } from "usefulkey";
+
+const keyStore = new HttpKeyStore({
+  baseUrl: process.env.KEY_API_URL!,
+  apiKey: process.env.KEY_API_TOKEN!,
+  headers: { "X-Service": "usefulkey" },
+  request: { timeoutMs: 10000 },
+  apiKeyHeader: { header: "X-API-Key" },
+  routes: {
+    createKey: "/v1/keys",
+    findKeyById: (id) => `/v1/keys/${id}`,
+    findKeyByHash: (hash) => `/v1/keys/by-hash/${hash}`,
+    updateKey: (id) => `/v1/keys/${id}`,
+    revokeKeyById: (id) => `/v1/keys/${id}/revoke`,
+    hardRemoveKeyById: (id) => `/v1/keys/${id}`,
+  },
+  serializeRecord: (r) => ({ ...r, metadata: r.metadata ?? {} }),
+  deserializeRecord: (p) => p as any,
+  revokeMethod: "PATCH",
+});
+
+const uk = usefulkey({ adapters: { keyStore } });
+```
+
+### Default endpoints (used if no `routes` are provided)
+
+These are the endpoints that this plugin expects to have on the endpoint that you provide. 
+For example, if you provide `baseUrl: "https://api.example.com"`, the plugin will expect the following endpoints:
+
+- POST `/keys`
+- GET `/keys/:id`
+- GET `/keys/by-hash/:keyHash`
+- PUT `/keys/:id`
+ - POST `/keys/:id/revoke`
+ - DELETE `/keys/:id`
+- GET `/keys/expired?olderThan=:ms&limit=:n`
+
+Override via `routes` and customize headers or auth.
+
+### Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `baseUrl` | `string` | — | Base URL of your key API. |
+| `apiKey` | `string` | — | Secret used to authenticate requests. Sets `Authorization: Bearer <apiKey>` unless overridden. |
+| `headers` | `Record<string,string>` | `{}` | Extra headers sent with every request. |
+| `request.timeoutMs` | `number` | `10000` | Per-request timeout in milliseconds (0 disables). |
+| `request.headers` | `Record<string,string>` | `{}` | Additional default headers. Merged with `headers`. |
+| `apiKeyHeader` | `{ header: string; scheme?: string }` | `Authorization: Bearer` | Alternate header for `apiKey`, e.g. `{ header: "X-API-Key" }`. |
+| `routes` | `Partial<HttpKeyStoreRoutes>` | REST defaults | Override endpoint paths. |
+| `serializeRecord` | `(record: KeyRecord) => unknown` | identity | Transform record before sending. |
+| `deserializeRecord` | `(payload: unknown) => KeyRecord` | cast | Transform response into `KeyRecord`. |
+| `revokeMethod` | `'POST' | 'PATCH'` | `POST` | HTTP method used for revoke route. |
+

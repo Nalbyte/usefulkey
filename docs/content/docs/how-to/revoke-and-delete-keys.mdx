@@ -1,0 +1,148 @@
+---
+title: Revoke and Delete Keys
+description: Learn how to revoke API keys and permanently delete them from storage.
+---
+
+## Key Revocation vs Deletion
+
+UsefulKey supports two ways to remove key access:
+
+- **Revoke**: Mark a key as invalid but keep it in storage (for audit purposes)
+- **Delete**: Permanently remove a key from storage
+
+## Revoking Keys
+
+Revoked keys will fail verification but remain in your storage for auditing.
+
+```ts
+import { usefulkey, MemoryKeyStore } from "usefulkey";
+
+const uk = usefulkey({
+  adapters: {
+    keyStore: new MemoryKeyStore(),
+  },
+});
+
+// Create a key
+const { result: keyData } = await uk.createKey({
+  metadata: { user: "john@example.com" }
+});
+
+// Verify it works
+const { result: beforeRevoke } = await uk.verifyKey({ key: keyData.key });
+console.log("Before revoke:", beforeRevoke.valid); // true
+
+// Revoke the key
+await uk.revokeKey(keyData.id);
+
+// Try to verify again
+const { result: afterRevoke } = await uk.verifyKey({ key: keyData.key });
+console.log("After revoke:", afterRevoke.valid); // false
+console.log("Reason:", afterRevoke.reason); // "revoked"
+```
+
+## Finding Keys by ID
+
+To revoke a key, you need its ID (not the plaintext key):
+
+```ts
+// Get key by plaintext value to find its ID
+const { result: keyRecord } = await uk.getKey(keyData.key);
+if (keyRecord) {
+  console.log("Key ID:", keyRecord.id);
+  console.log("User:", keyRecord.metadata?.user);
+}
+```
+
+## Permanently Deleting Keys
+
+Hard deletion completely removes keys from storage:
+
+```ts
+// Create and then delete a key
+const { result: tempKey } = await uk.createKey({
+  metadata: { temporary: true }
+});
+
+// Permanently delete the key
+await uk.hardRemoveKey(tempKey.id);
+
+// Try to verify - key is completely gone
+const { result: checkDeleted } = await uk.verifyKey({ key: tempKey.key });
+console.log("Key exists:", checkDeleted.valid); // false
+console.log("Reason:", checkDeleted.reason); // "not_found"
+```
+
+
+## Key Lifecycle Example
+
+```ts
+import { usefulkey, MemoryKeyStore } from "usefulkey";
+
+async function keyLifecycleExample() {
+  const uk = usefulkey({
+    adapters: {
+      keyStore: new MemoryKeyStore(),
+    },
+  });
+
+  console.log("=== Creating Keys ===");
+  const { result: key1 } = await uk.createKey({ metadata: { user: "alice" } });
+  const { result: key2 } = await uk.createKey({ metadata: { user: "bob" } });
+
+  console.log(`Created key for Alice: ${key1.id}`);
+  console.log(`Created key for Bob: ${key2.id}`);
+
+  console.log("\n=== Verifying Keys ===");
+  const { result: check1 } = await uk.verifyKey({ key: key1.key });
+  const { result: check2 } = await uk.verifyKey({ key: key2.key });
+  console.log(`Alice's key valid: ${check1.valid}`);
+  console.log(`Bob's key valid: ${check2.valid}`);
+
+  console.log("\n=== Revoking Alice's Key ===");
+  await uk.revokeKey(key1.id);
+
+  const { result: checkAfterRevoke } = await uk.verifyKey({ key: key1.key });
+  console.log(`Alice's key after revoke: ${checkAfterRevoke.valid} (${checkAfterRevoke.reason})`);
+  console.log(`Bob's key still valid: ${(await uk.verifyKey({ key: key2.key })).result.valid}`);
+
+  console.log("\n=== Deleting Bob's Key ===");
+  await uk.hardRemoveKey(key2.id);
+
+  const { result: checkAfterDelete } = await uk.verifyKey({ key: key2.key });
+  console.log(`Bob's key after delete: ${checkAfterDelete.valid} (${checkAfterDelete.reason})`);
+
+  console.log("\n=== Checking Key Records ===");
+  const { result: record1 } = await uk.getKeyById(key1.id);
+  const { result: record2 } = await uk.getKeyById(key2.id);
+
+  console.log(`Alice's record exists: ${record1 !== null}`);
+  console.log(`Bob's record exists: ${record2 !== null}`);
+}
+
+keyLifecycleExample();
+```
+
+## Best Practices
+
+1. **Use revoke for security issues** - Keeps audit trail
+2. **Use delete for cleanup** - Removes sensitive data completely
+3. **Store key IDs** - Keep track of key IDs for management
+4. **Log revocations** - Track when and why keys are revoked
+5. **Regular cleanup** - Delete old revoked keys periodically
+
+## When to Revoke vs Delete
+
+**Revoke when:**
+- Security concern (compromised key)
+- User account suspended
+- Temporary access removal
+- Need audit trail
+
+**Delete when:**
+- Key was created by mistake
+- User permanently deleted
+- Cleaning up test keys
+- GDPR/data cleanup requirements
+
+The choice depends on your compliance and auditing requirements.

@@ -1,0 +1,127 @@
+---
+title: Quick Start
+description: Start using UsefulKey in minutes. Configure adapters, add plugins, and see how each plugin changes the UsefulKey API.
+
+---
+
+import { Steps, Step } from 'fumadocs-ui/components/steps';
+import { Accordions, Accordion } from 'fumadocs-ui/components/accordion';
+
+## Install
+
+```npm  
+npm i usefulkey
+```
+
+## Quick Start
+
+<Steps>
+  <Step>
+    <h3>Initialize UsefulKey</h3>
+    <p>Configure adapters and defaults. Use in-memory adapters to get started quickly. See [Configuration](/docs/concepts/configuration) for more options.</p>
+
+```ts
+import { usefulkey, MemoryKeyStore, MemoryRateLimitStore, ConsoleAnalytics } from "usefulkey";
+
+const uk = usefulkey( 
+   {
+    adapters: {
+      keyStore: new MemoryKeyStore(),
+      rateLimitStore: new MemoryRateLimitStore(),
+      analytics: new ConsoleAnalytics(),
+    },
+
+  });
+```
+  </Step>
+  <Step>
+    <h3>Add plugins</h3>
+    <p>Plugins add behavior and may extend the UsefulKey instance with new methods.</p>
+
+```ts
+const uk = usefulkey(
+  {
+    // ...config
+  },
+  {
+    plugins: [
+      //All plugins are optional.
+      // Enable/disable keys
+      // enableDisablePlugin(),
+
+      // IP access control with a static allow list
+      // ipAccessControlStatic({ allow: ["1.1.1.1"] }),
+
+      // IP access control with a memory allow list that can be modified at runtime
+      // ipAccessControlMemory(),
+
+      // IP access control with persistent allow/deny in your KeyStore
+      // ipAccessControlKeystore(),
+
+      // Permissions/scopes
+      // permissionsScopesPlugin({ metadataKey: "scopes" }),
+
+      // Rate limit default for all verifyKey calls
+      // ratelimit({ default: { kind: "fixed", limit: 100, duration: "1m" } }),
+
+      // Usage limits per key
+      // usageLimitsPerKeyPlugin(),
+    ],
+  }
+);
+```
+  </Step>
+  <Step>
+    <h3>Basic create and verify</h3>
+    <p>Use the UsefulKey instance to create and verify keys.</p>
+
+```ts
+// Create a key
+const { result: created } = await uk.createKey({ metadata: { plan: "free" } });
+
+// created -> { id: "...", key: "...", metadata: { plan: "free" } }
+
+// Verify the key (namespace required when ratelimit plugin is enabled)
+const { result: verified } = await uk.verifyKey({ 
+  key: created.key, 
+  namespace: "api" 
+}); 
+
+// verified -> { valid: true, keyId: "...", metadata: { plan: "free" } }
+
+// Get the key record (doesn't include plaintext key)
+const { result: keyRecord } = await uk.getKey(created.key);
+
+// keyRecord -> { 
+//   id: "...", 
+//   userId: null, 
+//   prefix: "...", 
+//   keyHash: "...", 
+//   createdAt: 1234567890, 
+//   expiresAt: null, 
+//   metadata: { plan: "free" }, 
+//   usesRemaining: null, 
+//   revokedAt: null 
+// }
+```
+  </Step>
+  <Step>
+    <h3>Optionally wait for setup</h3>
+    <p>Some plugins/adapters perform async setup. You can await readiness once during boot.</p>
+
+```ts
+await uk.ready;
+```
+  </Step>
+</Steps>
+
+
+
+---
+
+See how plugins and adapters work in the [Concepts](/docs/concepts) section.
+
+
+
+
+For more, see the [API Reference](/docs/api/verify-key) and individual plugin pages under [Plugins](/docs/plugins).

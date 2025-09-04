@@ -1,0 +1,38 @@
+---
+title: Overview
+description: What plugins are available and when to use them.
+---
+
+Plugins are add-ons that give your key system extra features without changing your main code. They work at specific points in the key verification process and can add helpful functions to your system.
+
+## Available Plugins
+
+Here are the plugins you can use:
+
+- **Rate Limit** - Control how many times keys can be used in a time period
+- **IP Access Control (Static)** - Block or allow specific IP addresses (set at startup)
+- **IP Access Control (Memory)** - Block or allow IPs with runtime management
+- **IP Access Control (Keystore)** - Persistent IP rules stored in your database
+- **Usage Limits per Key** - Limit how many times each key can be used
+- **Enable / Disable** - Temporarily turn keys on or off
+- **Permissions / Scopes** - Control what each key can access
+
+## How Plugins Work
+
+Plugins connect to your system at key moments:
+- Before checking a key
+- After loading key data
+- After successful verification
+- Before creating a key
+
+Some plugins add new functions to your `uk` instance that you can call directly.
+
+## Getting Started
+
+Click on any plugin name in the sidebar to learn how to use it. Each page has:
+- Simple examples
+- Configuration options
+- When to use it
+
+Want to build your own plugin? See: [Authoring Plugins](./authoring)
+

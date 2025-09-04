@@ -1,0 +1,192 @@
+---
+title: Authoring Plugins
+description: How to write a UsefulKey plugin hooks, setup, and extending the instance with typed helpers.
+---
+
+Plugins let you add new features to UsefulKey without changing the main code. A plugin is a function that connects to UsefulKey at key moments and can add new functions you can call.
+
+Think of a plugin like a helper that watches what UsefulKey is doing and can step in when needed.
+
+### Basic Plugin Structure
+
+Here's what a plugin looks like:
+
+```ts
+import type { UsefulKeyPlugin } from "usefulkey";
+
+export function myPlugin(): UsefulKeyPlugin<{ __hasMyPlugin: true }> {
+  return {
+    name: "my-plugin",
+
+    // Run once when UsefulKey starts up
+    async setup(ctx) {
+      // Do setup work here (optional)
+      // Like connecting to databases or loading config
+    },
+
+    // Run before checking if a key is valid
+    async beforeVerify(ctx, { key, ip, identifier, namespace, rateLimit }) {
+      // Check the key before UsefulKey processes it
+      if (key.endsWith("bad")) {
+        return { reject: true, reason: "bad_suffix" };
+      }
+    },
+
+    // Run after loading key data from storage
+    async onKeyRecordLoaded(ctx, { input, record }) {
+      // You can see the key data here
+      // Return { reject: true } to stop the verification
+    },
+
+    // Run after a key passes all checks
+    async onVerifySuccess(ctx, { input, record }) {
+      // Key is valid! Do something here
+      // Like sending analytics or logging
+    },
+
+    // Run before creating a new key
+    async beforeCreateKey(ctx, { input }) {
+      // Check if we should allow creating this key
+      if (input.usesRemaining === 0) {
+        return { reject: true, reason: "invalid_uses" };
+      }
+    },
+
+    // Run after a key is created
+    async onKeyCreated(ctx, { record }) {
+      // New key created! Maybe notify someone
+    },
+
+    // Add new functions to the uk instance
+    extend: {
+      __hasMyPlugin: true,
+    },
+  };
+}
+```
+
+### Using a Plugin
+
+To use your plugin, add it when you create UsefulKey:
+
+```ts
+import { usefulkey } from "usefulkey";
+import { myPlugin } from "./my-plugin";
+
+const uk = usefulkey({}, { plugins: [myPlugin()] as const });
+
+// Wait for plugins to finish setting up (optional)
+await uk.ready;
+
+// Now you can use any new functions the plugin added
+uk.__hasMyPlugin; // This will be true
+```
+
+### When Hooks Run
+
+Here's when each hook gets called:
+
+- **beforeVerify** - Runs first when checking a key. Return `{ reject: true }` to stop the verification.
+- **onKeyRecordLoaded** - Runs after loading key data but before checking if it's expired or used up.
+- **onVerifySuccess** - Runs only when a key passes all checks successfully.
+- **beforeCreateKey** - Runs before creating a new key. Return `{ reject: true }` to prevent creation.
+- **onKeyCreated** - Runs after a key is successfully created.
+- **setup** - Runs once when UsefulKey starts up. Good for one-time setup work.
+
+If your hook throws an error, it's caught and logged, but UsefulKey keeps running. To stop the process, return `{ reject: true }`.
+
+### Adding New Functions
+
+Plugins can add new functions that you can call on your `uk` instance. Use the `extend` property:
+
+```ts
+export function enableFlagPlugin() {
+  return {
+    name: "enable-flag",
+    extend: {
+      // Add a new function that anyone can call
+      setFeatureFlag(id: string, flag: string, value: boolean) {
+        // Your code here
+      },
+    },
+  } satisfies ReturnType<UsefulKeyPlugin>;
+}
+
+const uk = usefulkey({}, { plugins: [enableFlagPlugin()] as const });
+
+// Now you can call the new function
+uk.setFeatureFlag("key_123", "beta", true);
+```
+
+### Best Practices
+
+- **Keep hooks fast** - Don't do slow work in hooks. Use `setup` for slow initialization.
+- **Use return values to block** - Return `{ reject: true }` instead of throwing errors.
+- **Don't change UsefulKey directly** - Use `extend` to add functions.
+- **Pick unique names** - Choose a unique `name` for your plugin for logging.
+- **Handle state carefully** - If your plugin manages data, make sure it's reliable.
+
+### TypeScript Types
+
+Import these types from `usefulkey`:
+
+```ts
+import type {
+  UsefulKeyPlugin,
+  UsefulKeyPluginHooks,
+} from "usefulkey";
+```
+
+### Examples to Study
+
+Look at these existing plugins for ideas:
+
+- `src/plugins/enable-disable/index.ts`
+- `src/plugins/permissions-scopes/index.ts`
+- `src/plugins/usage-limits-per-key/index.ts`
+
+## Plugin Order
+
+Plugins run in the order you list them when creating UsefulKey:
+
+```ts
+const uk = usefulkey({}, {
+  plugins: [firstPlugin(), secondPlugin(), thirdPlugin()]
+});
+```
+
+Early plugins can stop later ones by returning `{ reject: true }`.
+
+## Performance Tips
+
+- UsefulKey loads key data once and shares it with all plugins
+- If your plugin needs extra data, try to load it once and reuse it
+- Don't make database calls in every hook if you can avoid it
+
+## Best Order for Plugins
+
+For best performance, order your plugins like this:
+
+1. **Fast blockers first** - IP restrictions, enable/disable checks
+2. **Policy checks** - Scopes and permissions
+3. **Usage tracking** - Things that update counters or logs
+
+## Sharing Data Between Plugins
+
+Plugins can share data and functions through the `extend` feature. This helps avoid doing the same work twice:
+
+```ts
+// Plugin 1 adds a helper
+extend: {
+  getCachedData() { /* ... */ }
+}
+
+// Plugin 2 can use it
+async setup(ctx) {
+  const data = ctx.uk.getCachedData(); // Access shared function
+}
+```
+
+Use this when multiple plugins need the same data or functionality.
+
+

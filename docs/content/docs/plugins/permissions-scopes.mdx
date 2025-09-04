@@ -1,0 +1,64 @@
+---
+title: Permissions / Scopes
+description: Require scopes at verify time and manage scopes per key. All requested scopes must be present on the key.
+---
+
+### How It Works
+
+This plugin controls what each key can access using "scopes" (like permissions):
+
+- Give keys scopes like "read", "write", "admin"
+- When verifying a key, you can require specific scopes
+- The key must have ALL required scopes, or verification fails
+- Scopes are stored in the key's metadata (default field: `"scopes"`)
+
+### Settings
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `metadataKey` | `string` | `"scopes"` | Where to store scopes in key metadata |
+
+### Usage
+
+```ts
+import { usefulkey, permissionsScopesPlugin } from "usefulkey";
+
+// Add the plugin (uses "scopes" field by default)
+const uk = usefulkey({}, {
+  plugins: [permissionsScopesPlugin()],
+});
+
+// Give a key some permissions
+await uk.grantScopes("key_123", ["read", "write"]);
+
+// Check what scopes a key has
+const scopes = await uk.getScopes("key_123");
+
+// Require scopes when verifying
+await uk.verifyKey({ key, scopes: ["write"] });        // ✓ Has "write"
+await uk.verifyKey({ key, scopes: ["read", "write"] }); // ✓ Has both
+await uk.verifyKey({ key, scopes: ["admin"] });        // ✗ Missing "admin"
+```
+
+### New Functions
+
+Manage key permissions with these functions:
+
+- `uk.grantScopes(id, scopes)` - Give a key new scopes
+- `uk.revokeScopes(id, scopes)` - Remove scopes from a key
+- `uk.setScopes(id, scopes)` - Replace all scopes for a key
+- `uk.getScopes(id)` - See what scopes a key has
+
+### What Happens During Verification
+
+- **Scopes required** → Key must have ALL the requested scopes
+- **Missing scopes** → `{ valid: false, reason: "insufficient_scope" }`
+
+### Analytics Events
+
+Tracks when scopes are managed:
+
+- **Blocked**: When verification fails due to missing scopes
+- **Granted**: When scopes are added to a key
+- **Revoked**: When scopes are removed
+- **Set**: When all scopes are replaced

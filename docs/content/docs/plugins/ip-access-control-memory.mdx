@@ -1,0 +1,86 @@
+---
+title: IP Access Control (Memory)
+description: Mutable allow/deny lists with runtime controls. Enforce source IP checks and manage lists at runtime.
+---
+
+### How It Works
+
+Control IPs with lists you can change while your app is running:
+
+- Set initial allow/deny lists when starting up
+- Add or remove IPs at runtime using helper functions
+- Lists are stored in memory (lost when app restarts)
+- Same blocking logic as static plugin
+
+### Settings
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `allow` | `string[]` | `[]` | Starting list of allowed IPs |
+| `deny` | `string[]` | `[]` | Starting list of blocked IPs |
+
+### Usage
+
+```ts
+import { usefulkey, ipAccessControlMemory } from "usefulkey";
+
+// Start with empty lists
+const uk = usefulkey({}, { plugins: [ipAccessControlMemory()] });
+
+// Add/remove IPs at runtime
+uk.ipAccessControl.addAllow("127.0.0.1");    // Allow local dev
+uk.ipAccessControl.addDeny("10.0.0.1");     // Block suspicious IP
+uk.ipAccessControl.removeAllow("127.0.0.1"); // Remove if needed
+
+// Check current lists
+const allowedIPs = uk.ipAccessControl.getAllow();
+const blockedIPs = uk.ipAccessControl.getDeny();
+
+// Clear all rules
+uk.ipAccessControl.clearAllow();
+uk.ipAccessControl.clearDeny();
+
+// Verify with IP
+const result = await uk.verifyKey({ key, ip: "192.168.1.1" });
+```
+
+### New Functions
+
+Manage IP lists with these functions on `uk.ipAccessControl`:
+
+- `addAllow(ip)` / `removeAllow(ip)` - Add/remove allowed IPs
+- `addDeny(ip)` / `removeDeny(ip)` - Add/remove blocked IPs
+- `clearAllow()` / `clearDeny()` - Clear all rules
+- `getAllow()` / `getDeny()` - See current lists
+
+### What Happens During Verification
+
+- **IP in deny list** → `{ valid: false, reason: "ip_denied" }`
+- **Allow list exists but IP not in it** → `{ valid: false, reason: "ip_not_allowed" }`
+
+Sends analytics when blocking IPs.
+
+### Using with Static IP Access Control
+
+Combine static and memory plugins for flexible IP control:
+
+```ts
+const uk = usefulkey({}, {
+  plugins: [
+    ipAccessControlStatic({
+      allow: ["1.2.3.4"],    // Fixed allowed IPs
+      deny: ["9.9.9.9"]      // Always blocked
+    }),
+    ipAccessControlMemory({
+      allow: ["1.2.3.4", "2.2.2.2"]  // Runtime management
+    }),
+  ],
+});
+
+await uk.verifyKey({ key, ip: "1.2.3.4" });
+```
+
+**How they combine:**
+- **Deny rules**: Blocked if in ANY plugin's deny list
+- **Allow rules**: Must be in ALL plugins' allow lists
+- **Order doesn't matter** - same result regardless of order

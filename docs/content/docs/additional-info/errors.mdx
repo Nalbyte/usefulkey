@@ -1,0 +1,98 @@
+---
+title: Error handling
+description: Unified error shape, error codes, and HTTP mapping guidelines.
+---
+
+## Error shape
+
+Public APIs return a discriminated union-like `Result<T>`:
+
+```ts
+type Result<T> = { result?: T; error?: UsefulKeyError };
+
+type UsefulKeyError = {
+  code: string;
+  message: string;
+  retryable?: boolean;
+  cause?: unknown;
+  meta?: Record<string, unknown>;
+};
+```
+
+Prefer handling `error` explicitly rather than relying on exceptions.
+
+### Normalization and metadata
+
+Errors are normalized via a utility so callers always receive a stable shape:
+
+```ts
+toError(err: unknown, fallbackCode: string, meta?: Record<string, unknown>): UsefulKeyError
+```
+
+- Preserves any thrown object that already has string `code` and `message`.
+- Otherwise uses `fallbackCode` and derives `message` from the thrown value.
+- Always attaches the original value on `cause` and merges provided `meta`.
+- Core paths include `meta.op` to indicate the operation (e.g. `"getKey"`, `"verifyKey"`, `"createKey"`, `"revokeKey"`, `"extendKeyExpiry"`, `"hardRemoveKey"`, `"sweepExpired"`).
+
+## Core error codes
+
+These codes originate from core and adapters:
+
+- `UNKNOWN`
+- `KEYSTORE_READ_FAILED`
+- `KEYSTORE_WRITE_FAILED`
+- `KEYSTORE_REVOKE_FAILED`
+- `KEYSTORE_SWEEP_UNSUPPORTED`
+- `ANALYTICS_TRACK_FAILED`
+- `KEY_GENERATION_FAILED`
+- `PLUGIN_BLOCKED`
+- `PLUGIN_SETUP_FAILED`
+
+Additionally, some operations may emit validation-style codes when inputs are invalid (for example, `INVALID_INPUT` from `extendKeyExpiry`). Plugins may emit their own codes as well (for example, `KEY_NOT_FOUND`, `INVALID_ARGUMENT`).
+
+## Verification reasons
+
+When `verifyKey` rejects, the `result` is present with `valid: false` and a `reason`:
+
+- `not_found`
+- `revoked`
+- `expired`
+- `usage_exceeded`
+- `blocked_by_plugin` (default when a plugin rejects without a custom reason)
+- `insufficient_scope`
+- `rate_limited` (configurable in the plugin)
+- `namespace_required` (when rate limit plugin is enabled and `namespace` is missing)
+
+## HTTP mapping guidelines
+
+- `valid: true` → 200 OK
+- `valid: false` reasons:
+  - `not_found` → 401/404 (pick one; 401 prevents leaking existence)
+  - `revoked`, `expired` → 401 Unauthorized
+  - `usage_exceeded` → 402/403/429 depending on product semantics; commonly 429
+  - `insufficient_scope` → 403 Forbidden
+  - `rate_limited` → 429 Too Many Requests (include reset info if available)
+  - `namespace_required` → 400 Bad Request
+
+Errors from core/adapters (`error.code`):
+
+- `KEYSTORE_*` → 500 Internal Server Error (with retryable depending on store)
+- `KEY_GENERATION_FAILED` → 500
+- `PLUGIN_BLOCKED` → translate to a 4xx aligned with the plugin’s `reason`
+
+## Example translation (Express)
+
+```ts
+const res = await uk.verifyKey({ key, identifier: req.ip, namespace: "api" });
+if (res.error) return reply.status(500).json(res.error);
+if (!res.result!.valid) {
+  const r = res.result!;
+  const status = r.reason === "rate_limited" ? 429
+    : r.reason === "insufficient_scope" ? 403
+    : 401;
+  return reply.status(status).json(r);
+}
+return reply.json(res.result);
+```
+
+

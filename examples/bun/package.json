@@ -1,0 +1,19 @@
+{
+	"name": "bun",
+	"module": "index.ts",
+	"type": "module",
+	"scripts": {
+		"dev": "bun --hot index.ts",
+		"start": "bun index.ts",
+		"build": "echo \"no build step\""
+	},
+	"dependencies": {
+		"usefulkey": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/bun": "latest"
+	},
+	"peerDependencies": {
+		"typescript": "^5.0.0"
+	}
+}

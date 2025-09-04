@@ -1,0 +1,171 @@
+---
+title: Adapters
+description: Storage, rate limiting, and analytics backends that can be customized to your preferences.
+---
+## What are adapters?
+
+Adapters are how you plug UsefulKey into your infrastructure. They are responsible for persisting and retrieving data from your chosen storage backend or logging analytics to your chosen service.
+
+## Overview
+
+UsefulKey by default uses the in-memory adapters and console analytics but these can be swapped out for any adapter you want. See the full configuration options [here](/docs/concepts/configuration).
+
+There are currently 3 adapter types:
+- Key store: `KeyStoreAdapter` - used to store and retrieve keys from a database or other storage location.
+- Rate limit store: `RateLimitStoreAdapter` - used to store and retrieve rate limits data.
+- Analytics: `AnalyticsAdapter` - used to log analytics.
+
+
+## Key store
+
+The key store adapter is responsible for persisting, retrieving, and managing API keys in your chosen storage backend. By default, UsefulKey uses an in-memory key store, but you can provide your own implementation to use databases like Postgres, MongoDB, or even remote HTTP APIs.
+
+This adapter is required for persistent storage.
+
+#### Key store adapter interface
+
+```ts
+export interface KeyStoreAdapter {
+  createKey(record: KeyRecord): Promise<void>;
+  findKeyByHash(hash: string): Promise<KeyRecord | null>;
+  findKeyById(id: KeyId): Promise<KeyRecord | null>;
+  updateKey(record: KeyRecord): Promise<void>;
+  revokeKeyById(id: KeyId): Promise<void>;
+}
+```
+
+See the [Types](/docs/additional-info/type-reference) page for detailed information about `KeyRecord`, `KeyId`, and other types used throughout UsefulKey.
+
+
+See list of avaliable key store adapters [here](/docs/adapters/keystore).
+
+#### Memory key store
+
+```ts
+import { usefulkey, MemoryKeyStore } from "usefulkey";
+
+const keyStore = new MemoryKeyStore();
+
+const uk = usefulkey({ adapters: { keyStore } });
+```
+
+#### Stored values
+
+- Memory (in-process):
+
+```json
+// Stored as in-memory map of records
+{
+  id: "k_123",
+  userId: "u_789",
+  prefix: "uk",
+  keyHash: "a3b1f6...",
+  createdAt: 1733942000000,
+  expiresAt: null,
+  metadata: { plan: "pro" },
+  usesRemaining: 42,
+  revokedAt: null
+}
+```
+
+## Rate limit store
+
+The rate limit store adapter persists request to a database or other storage location. It powers the rate limiting plugins and supports fixed-window and token bucket strategies. By default, UsefulKey uses an in-memory store, but you can provide Redis, SQLite, or Postgres implementations.
+
+#### Rate limit store adapter interface
+
+```ts
+export interface RateLimitStoreAdapter {
+  incrementAndCheck(
+    namespace: string,
+    identifier: string,
+    limit: number,
+    durationMs: number
+  ): Promise<{ success: boolean; remaining: number; reset: number }>;
+  check(
+    namespace: string,
+    identifier: string,
+    limit: number,
+    durationMs: number
+  ): Promise<{ success: boolean; remaining: number; reset: number }>;
+  consumeTokenBucket(
+    namespace: string,
+    identifier: string,
+    capacity: number,
+    refillTokens: number,
+    refillIntervalMs: number,
+    cost?: number
+  ): Promise<{ success: boolean; remaining: number; reset: number }>;
+  reset(namespace: string, identifier: string): Promise<void>;
+}
+```
+
+See list of available rate limit store adapters [here](/docs/adapters/ratelimit-store).
+
+#### Memory rate limit store
+
+```ts
+import { usefulkey, MemoryRateLimitStore } from "usefulkey";
+
+const rateLimitStore = new MemoryRateLimitStore();
+
+const uk = usefulkey({ adapters: { rateLimitStore } });
+```
+
+#### Stored values
+
+- Memory (in-process):
+
+```ts
+// Fixed window (windows map)
+"global:ip_1.1.1.1" => { count: 3, reset: 1733942399123 }
+
+// Token bucket (buckets map)
+"global:ip_1.1.1.1" => {
+  tokens: 6,
+  lastRefill: 1733942398000,
+  capacity: 10,
+  refillTokens: 1,
+  refillIntervalMs: 1000
+}
+```
+
+
+## Analytics
+
+The analytics adapter lets UsefulKey emit audit and usage events to your observability stack.
+
+#### Analytics adapter interface
+
+```ts
+export interface AnalyticsAdapter {
+  track(event: string, payload: Record<string, unknown>): Promise<void>;
+}
+```
+
+#### Console analytics
+
+```ts
+import { usefulkey, ConsoleAnalytics } from "usefulkey";
+
+const analytics = new ConsoleAnalytics();
+
+const uk = usefulkey({ adapters: { analytics } });
+```
+
+See list of available analytics adapters [here](/docs/adapters/analytics).
+
+
+#### Stored values / outputs
+
+- Console analytics (stdout):
+
+```txt
+[usefulkey:analytics] key.verified { keyId: 'k_123', ip: '1.1.1.1', ok: true }
+[usefulkey:analytics] rate.limit.hit { namespace: 'global', identifier: 'ip_1.1.1.1', limit: 100 }
+```
+
+
+## Authoring your own adapters
+
+See the [Authoring your own adapters](/docs/adapters/authoring) section for more information.

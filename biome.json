@@ -1,0 +1,63 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.1.4/schema.json",
+	"vcs": {
+		"enabled": true,
+		"clientKind": "git",
+		"useIgnoreFile": true
+	},
+	"files": {
+		"ignoreUnknown": false,
+		"includes": [
+			"src/**",
+			"tests/unit/**",
+			"examples/hono/src/**",
+			"examples/nextjs/**",
+			"examples/astro/**",
+			"examples/bun/**",
+			"examples/cloudflare/**",
+			"docs/**",
+			"usefulkey.config.ts",
+			"vitest.config.ts"
+		]
+	},
+	"formatter": {
+		"enabled": true,
+		"indentStyle": "tab"
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"recommended": true,
+			"suspicious": {
+				"noExplicitAny": "off"
+			}
+		}
+	},
+	"javascript": {
+		"formatter": {
+			"quoteStyle": "double"
+		}
+	},
+	"assist": {
+		"enabled": true,
+		"actions": {
+			"source": {
+				"organizeImports": "on"
+			}
+		}
+	},
+	"overrides": [
+		{
+			"includes": ["tests/**", "examples/**"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noExplicitAny": "off",
+						"noAssignInExpressions": "off"
+					},
+					"style": { "noNonNullAssertion": "off" }
+				}
+			}
+		}
+	]
+}

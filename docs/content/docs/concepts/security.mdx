@@ -1,0 +1,57 @@
+---
+title: Security
+description: How UsefulKey handles keys, hashing, metadata, and recommended hardening steps.
+---
+
+## Goals and threat model
+
+- UsefulKey is designed so plaintext keys are never stored server-side. Only a one-way hash is persisted in your keystore adapter.
+- Verification proves possession of a plaintext key by hashing the presented value and matching it against the stored hash.
+- The model assumes attackers may read your database; therefore, plaintext must not be derivable from stored data.
+- We recommend setting a secret when you create the UsefulKey instance. This will use a secret-based hash (HMAC with SHA-256) for hashing/verification. This improves resistance to offline guessing if your database is leaked.
+
+## Key handling
+
+- Keys are returned exactly once from `uk.createKey(...)` to your application. You must deliver and store them securely on the client side. For example in a cookie or secure storage.
+- Server-side storage contains only:
+  - `keyHash` (default SHA-256; can use HMAC with SHA-256 when a `secret` is configured; also overridable via `customHashKey`)
+  - metadata, timestamps, usage counters, and revocation/expiry fields
+
+## Hashing
+
+- Default: SHA-256 via a portable provider. You can enable secret-based hashing by setting `secret`, which uses HMAC with SHA-256. Or override with `customHashKey: (key) => string` when you have platform-specific crypto.
+- Requirements for custom hashing:
+  - Deterministic and collision-resistant
+  - Output encoding must be stable (hex recommended)
+- Never store plaintext or reversible transforms of the key.
+
+## Key formats and length
+
+- Key format is controlled by `defaultKeyKind` and `KEY` helpers, or fully via `customGenerateKey`.
+- Recommendations:
+  - Public APIs: URL-safe random strings, length 32–56 chars (entropy-first). Example: `KEY.URLSafe(40)`.
+  - Internal service keys: `KEY.Hex(32)` or `KEY.URLSafe(32+)`.
+- Avoid using only version 4 UUIDs for public keys; they have less randomness per character than recommended random strings.
+
+
+## Metadata safety
+
+- Metadata is application-defined. Treat it as non-sensitive unless you encrypt or avoid storing secrets entirely.
+- Use metadata for: plan, scopes, tenant, feature flags, etc.
+
+
+## Generating secret key for UsefulKey
+
+You are responsible for generating, storing, and managing a secret key. This is used to hash keys and is required for the HMAC with SHA-256 hashing algorithm.
+See the [Configuration](/docs/concepts/configuration) section for more information on how to set the secret key.
+
+You can use something like openSSL to generate a secret key:
+
+```bash
+openssl rand -hex 32
+```
+
+
+
+
+

@@ -1,0 +1,70 @@
+---
+title: Analytics events
+description: Event names, payload shapes, and when they are emitted by core and plugins.
+---
+
+UsefulKey emits audit/analytics events using the configured `AnalyticsAdapter`.
+
+## Core events
+
+- `key.created`
+  - `{ keyId, userId, ts }`
+- `key.verified`
+  - `{ keyId, userId, identifier, ts }`
+- `key.revoked`
+  - `{ keyId, ts }`
+- `key.hard_removed`
+  - `{ keyId, ts }`
+- `key.expiry_extended`
+  - `{ keyId, from, to, deltaMs, ts }`
+- `keys.expired_swept`
+  - `{ processed, revoked, hardRemoved, olderThan, strategy, ts }`
+
+## Rate limit plugin
+
+- `ratelimit.blocked`
+  - `{ kind: "fixed" | "tokenBucket", namespace, identifier, reset, limit?, capacity?, remaining, ts }`
+
+## Usage limits per key plugin
+
+- `usage.blocked`
+  - `{ keyId, userId, remaining: 0, ts }`
+- `usage.decremented`
+  - `{ keyId, userId, remaining, ts }`
+- `usage.set`
+  - `{ keyId, userId, remaining, ts }`
+- `usage.topped_up`
+  - `{ keyId, userId, added, remaining, ts }`
+- `usage.cleared`
+  - `{ keyId, userId, ts }`
+
+## Permissions / scopes plugin
+
+- `scopes.blocked`
+  - `{ keyId, userId, required: string[], have: string[] | string, ts }`
+- `scopes.granted`
+  - `{ keyId, added: string[], result: string[], ts }`
+- `scopes.revoked`
+  - `{ keyId, removed: string[], result: string[], ts }`
+- `scopes.set`
+  - `{ keyId, result: string[], ts }`
+
+## Enable / disable plugin
+
+- `key.disabled`
+  - `{ keyId, ts }`
+- `key.enabled`
+  - `{ keyId, ts }`
+
+## IP access control plugin
+
+- `ip_access.blocked`
+  - `{ ip, rule: "deny" | "allow_list_missing", plugin: "ip-access-control:memory" | "ip-access-control:static", ts }`
+
+## Notes
+
+- Timestamps (`ts`) are epoch milliseconds.
+- Payloads may include `userId` when available on the key record.
+- Use a production adapter to forward events to your observability stack (e.g., ClickHouse, Kafka, or your analytics service).
+
+

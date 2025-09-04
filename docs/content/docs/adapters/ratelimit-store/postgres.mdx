@@ -1,0 +1,64 @@
+---
+title: Postgres
+description: Postgres-backed fixed window and token bucket.
+---
+
+### Overview
+
+- Postgres-backed rate limit store implementing fixed windows and a rolling token bucket.
+- Creates the required tables and indexes if they do not exist.
+
+### Usage
+
+```ts
+import { Client } from "pg";
+import { PostgresRateLimitStore, usefulkey } from "usefulkey";
+
+const client = new Client({ connectionString: process.env.DATABASE_URL });
+await client.connect();
+
+const rateLimitStore = new PostgresRateLimitStore(client, {
+  tableName: "usefulkey_rate_limits",
+});
+
+const uk = usefulkey({ adapters: { rateLimitStore } });
+```
+
+### Client compatibility
+
+- This has been tested with `pg` and `postgres.js`.
+- This adapter automatically adapts `pg` and `postgres.js` Client instances for proper TypeScript compatibility.
+- You are welcome to submit PRs for other Postgres clients. See [contribution guide](/docs/additional-info/contributing) for more information.
+- Other clients may work but have not been tested.
+
+### Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `tableName` | `string` | `"usefulkey_rate_limits"` | Base table name for fixed windows (bucket table is suffixed with `_buckets`). |
+
+### Tables
+
+```sql
+CREATE TABLE IF NOT EXISTS usefulkey_rate_limits (
+  namespace TEXT NOT NULL,
+  identifier TEXT NOT NULL,
+  count INTEGER NOT NULL,
+  reset BIGINT NOT NULL,
+  PRIMARY KEY(namespace, identifier)
+);
+CREATE INDEX IF NOT EXISTS idx_usefulkey_rate_limits_reset ON usefulkey_rate_limits(reset);
+
+CREATE TABLE IF NOT EXISTS usefulkey_rate_limits_buckets (
+  namespace TEXT NOT NULL,
+  identifier TEXT NOT NULL,
+  tokens DOUBLE PRECISION NOT NULL,
+  lastRefill BIGINT NOT NULL,
+  capacity INTEGER NOT NULL,
+  refillTokens DOUBLE PRECISION NOT NULL,
+  refillIntervalMs BIGINT NOT NULL,
+  PRIMARY KEY(namespace, identifier)
+);
+CREATE INDEX IF NOT EXISTS idx_usefulkey_rate_limits_buckets_lastRefill ON usefulkey_rate_limits_buckets(lastRefill);
+```
+

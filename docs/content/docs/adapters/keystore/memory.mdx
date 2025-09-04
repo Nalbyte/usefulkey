@@ -1,0 +1,29 @@
+---
+title: Memory
+description: In-memory keystore for local development and testing.
+---
+
+### Overview
+
+- An in-memory keystore storing records in local `Map`s.
+- Suitable for tests and ephemeral environments. Not distributed.
+
+### Usage
+
+```ts
+import { MemoryKeyStore, usefulkey } from "usefulkey";
+
+const keyStore = new MemoryKeyStore();
+const uk = usefulkey({ adapters: { keyStore } });
+```
+
+### Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| — | — | — | This adapter has no options. |
+
+### Notes
+
+- Volatile and single-process. Not for production.
+

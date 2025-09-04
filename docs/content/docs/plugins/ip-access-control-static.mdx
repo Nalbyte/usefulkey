@@ -1,0 +1,73 @@
+---
+title: IP Access Control (Static)
+description: Allow/Deny lists captured at startup. Enforce source IP checks during verify.
+---
+
+### How It Works
+
+Control which IP addresses can use your keys:
+
+- Set `allow` list to only permit specific IPs
+- Set `deny` list to block specific IPs
+- Deny list always wins over allow list
+- Lists are set when you start your app and can't be changed
+
+### Settings
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `allow` | `string[]` | `[]` | IPs that are allowed (if empty, all IPs allowed except denied ones) |
+| `deny` | `string[]` | `[]` | IPs that are blocked (always blocked) |
+
+### Usage
+
+```ts
+import { usefulkey, ipAccessControlStatic } from "usefulkey";
+
+// Set up IP restrictions at startup
+const uk = usefulkey({}, {
+  plugins: [
+    ipAccessControlStatic({
+      allow: ["127.0.0.1"],  // Only allow local development
+      deny: ["10.0.0.1"]     // Block this suspicious IP
+    }),
+  ],
+});
+
+// Check keys with IP address
+const result = await uk.verifyKey({
+  key: userKey,
+  ip: "127.0.0.1"  // IP of the person using the key
+});
+```
+
+### What Happens During Verification
+
+- **IP in deny list** → `{ valid: false, reason: "ip_denied" }`
+- **Allow list exists but IP not in it** → `{ valid: false, reason: "ip_not_allowed" }`
+- **IP allowed** → Verification continues normally
+
+The plugin sends analytics when blocking IPs.
+
+### Combining with Other IP Plugins
+
+You can use static and memory IP plugins together:
+
+```ts
+const uk = usefulkey({}, {
+  plugins: [
+    ipAccessControlStatic({
+      allow: ["1.2.3.4"],    // Base allowed IPs
+      deny: ["9.9.9.9"]      // Always blocked
+    }),
+    ipAccessControlMemory({
+      allow: ["1.2.3.4", "2.2.2.2"]  // Extra IPs you can add/remove at runtime
+    }),
+  ],
+});
+```
+
+**How they work together:**
+- **Deny rules**: IP blocked if in ANY plugin's deny list
+- **Allow rules**: IP must be in ALL plugins' allow lists (if they have any)
+- **Order doesn't matter** - result is the same regardless of plugin order

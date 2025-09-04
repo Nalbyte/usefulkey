@@ -1,0 +1,13 @@
+{
+	"title": "API",
+	"pages": [
+		"verify-key",
+		"create-key",
+		"get-key",
+		"get-key-by-id",
+		"revoke-key",
+		"extend-key-expiry",
+		"hard-remove-key",
+		"sweep-expired"
+	]
+}

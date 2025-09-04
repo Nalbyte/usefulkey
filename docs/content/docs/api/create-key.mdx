@@ -1,0 +1,50 @@
+---
+title: createKey
+description: Generate, store, and return a new plaintext key with its id and metadata.
+---
+
+### Description
+
+Creates a new API key and stores it in the key store. The function returns the plaintext key along with its ID and any metadata. This is typically used when setting up new API access for users or projects. The plaintext key should only be shown once and then discarded - only the ID and key hash should be stored for future reference.
+
+### Signature
+
+```ts
+createKey(): Promise<Result<CreateKeyResult>>
+createKey(input: CreateKeyInput): Promise<Result<CreateKeyResult>>
+```
+
+### Parameters (CreateKeyInput)
+
+- **id?**: custom id (defaults to UUID).
+- **userId?**: associate a user.
+- **prefix?**: override default prefix when rendering.
+- **expiresAt?**: epoch ms expiry or null for no expiry.
+- **metadata?**: arbitrary object to store.
+- **usesRemaining?**: finite usage count; null/omitted means unlimited.
+- **keyKind?**: override instance default (see `KEY` helpers).
+
+### Returns
+
+`Promise<Result<{ id: string; key: string; metadata?: object }>>`
+
+### Examples
+
+```ts
+const { result } = await uk.createKey({ userId, metadata: { plan: "pro" } });
+console.log(result?.key); // show once
+```
+
+Override key kind and prefix:
+
+```ts
+await uk.createKey({ keyKind: KEY.URLSafe(32, "svc"), prefix: "svc" });
+```
+
+### Notes
+
+- Plugins can block creation via `beforeCreateKey`.
+- Sends `key.created` analytics; `onKeyCreated` plugin hook runs after storage.
+
+
+

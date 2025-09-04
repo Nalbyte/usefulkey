@@ -1,0 +1,40 @@
+---
+title: Rate Limiting
+description: A simple guide to rate limiting and how to use it with UsefulKey.
+---
+
+## What is rate limiting?
+
+Rate limiting controls how many requests a client can make in a period of time. It protects your API from abuse, reduces accidental overload, and helps enforce fair use across users or IPs.
+
+Common examples:
+
+- Limit each IP to 100 requests per minute
+- Limit each user to 1 upload every 5 seconds
+- Limit a specific API key to 1,000 requests per hour
+
+## When should I use it?
+
+- To prevent spikes that can slow down or crash your service
+- To keep costs under control for public APIs
+- To enforce plan limits (free vs. paid)
+
+## Core concepts for UsefulKey rate limiting
+
+- **Identifier**: Who or what is being limited. Often an IP address, user ID, or API key. By default, UsefulKey uses `identifier -> ip -> key` (in that order). You can override it per call or via plugin settings.
+- **Namespace**: A label to group limits by feature or surface (for example, `"global"`, `"api"`, `"auth"`, `"uploads"`). Rate limits are tracked per `(namespace, identifier)`. Namespaces are required when the rateLimit plugin is used.
+- **Strategy**: The algorithm used to enforce limits. UsefulKey supports fixed window and token bucket.
+- **Precedence**: On each verification, UsefulKey applies at most **one** limit:
+  - If the verifyKey call passes a `rateLimit`, it is used.
+  - Else, if the plugin has a `default`, it is used.
+  - Else, error.
+
+## Available strategies
+
+- **Fixed window**: Allow N requests in a time window (for example, 100 per minute). Simple and predictable.
+- **Token bucket**: Start with a capacity, refill tokens over time, and consume per request. Smooths bursts while keeping an average rate.
+
+Sliding window is not supported yet. See [Roadmap](/docs/additional-info/roadmap) for more details.
+
+## How to use the rate limiting plugin
+For more information on how to use the rate limiting plugin, see the [Rate Limiting](/docs/plugins/rate-limiting) plugin documentation.

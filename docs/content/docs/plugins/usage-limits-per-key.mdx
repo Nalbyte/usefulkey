@@ -1,0 +1,69 @@
+---
+title: Usage Limits per Key
+description: Enforce and decrement per-key usage counters. Provide helpers to manage remaining uses.
+---
+
+### How It Works
+
+This plugin limits how many times each key can be used:
+
+- Set `usesRemaining` when creating a key (like 100 uses)
+- Each successful verification reduces the count by 1
+- When count reaches 0, the key stops working
+- Set `usesRemaining` to `null` for unlimited keys
+
+### Settings
+
+This plugin works out of the box - no configuration needed.
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| (none) | — | — | No setup required. |
+
+### Usage
+
+```ts
+import { usefulkey, usageLimitsPerKeyPlugin } from "usefulkey";
+
+// Add the plugin
+const uk = usefulkey({}, { plugins: [usageLimitsPerKeyPlugin()] });
+
+// Create a key with 100 uses
+const { result } = await uk.createKey({
+  userId: "u1",
+  usesRemaining: 100
+});
+
+// Use the key (count goes down by 1 each time)
+await uk.verifyKey({ key: result!.key });
+
+// Manage the usage
+await uk.setUsesRemaining(result!.id, 50);     // Set to exactly 50
+await uk.topUpUses(result!.id, 25);            // Add 25 more uses
+const remaining = await uk.getUsesRemaining(result!.id); // Check remaining
+await uk.clearUsageLimit(result!.id);          // Remove limit (unlimited)
+```
+
+### New Functions
+
+This plugin adds these functions to manage key usage:
+
+- `uk.setUsesRemaining(id, count)` - Set exact number of remaining uses
+- `uk.topUpUses(id, amount)` - Add more uses to a key
+- `uk.getUsesRemaining(id)` - Check how many uses are left
+- `uk.clearUsageLimit(id)` - Remove usage limit (make unlimited)
+
+### What Happens During Verification
+
+- **No uses left** → `{ valid: false, reason: "usage_exceeded" }`
+- **Uses remaining** → Count decreases by 1 and saves the new value
+
+### Analytics Events
+
+The plugin tracks these events:
+
+- **Blocked**: When key runs out of uses
+- **Used**: Each time a key is verified successfully
+- **Set**: When you change the usage count
+- **Topped up**: When you add more uses
+- **Cleared**: When you remove the limit
