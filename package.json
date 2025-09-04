@@ -1,6 +1,6 @@
 {
   "name": "usefulkey",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Open‑source, Self‑hostable, Typescript toolkit for API keys and rate limiting. Designed to be simple to adopt and easy to extend.",
   "website": "https://usefulkey.nalbyte.com",
   "keywords": [
