@@ -48,12 +48,12 @@ export default function HomePage() {
 				<FeatureCard
 					title="Adapters"
 					description="Use Postgres, Redis, SQLite, Cloudflare D1/KV, or HTTP backends."
-					href="/docs/adapters/overview"
+					href="/docs/concepts/adapters"
 				/>
 				<FeatureCard
 					title="Plugins"
 					description="Enable scopes, IP access control, usage caps, and more."
-					href="/docs/plugins/overview"
+					href="/docs/concepts/plugins"
 				/>
 				<FeatureCard
 					title="Rate limiting"
